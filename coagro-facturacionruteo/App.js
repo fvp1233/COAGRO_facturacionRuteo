@@ -9,6 +9,8 @@ import ClientesScreen from './src/screens/clientes/ClientesScreen';
 import DatosScreen from './src/screens/DatosScreen';
 import ReportesScreen from './src/screens/ReportesScreen';
 import { configExists, deleteConfig } from './src/services/localConfig';
+import { clearSession } from './src/services/session';
+import { clearToken } from './src/services/tokenStore';
 import { databaseExists, resetDatabase } from './src/db/database';
 import { colors } from './src/theme';
 
@@ -32,7 +34,7 @@ export default function App() {
   const handleDevReset = () => {
     Alert.alert(
       'Reiniciar datos locales',
-      'Se borrarán la configuración (JSON) y la base SQLite de este dispositivo. Solo para desarrollo.',
+      'Se borrarán la configuración (JSON), el token y la base SQLite de este dispositivo. Solo para desarrollo.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -40,6 +42,8 @@ export default function App() {
           style: 'destructive',
           onPress: async () => {
             await resetDatabase();
+            await clearToken();
+            clearSession();
             deleteConfig();
             setScreen('connection');
           },
@@ -79,7 +83,10 @@ export default function App() {
               setActiveModule(module);
               setScreen('module');
             }}
-            onLogout={() => setScreen('login')}
+            onLogout={() => {
+              clearSession();
+              setScreen('login');
+            }}
           />
         );
     }

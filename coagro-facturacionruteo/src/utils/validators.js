@@ -5,6 +5,8 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const HOST_REGEX = /^(?:\d{1,3}(?:\.\d{1,3}){3}|[a-z0-9]([a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*)(?::\d{1,5})?$/i;
 
 export const MIN_PASSWORD_LENGTH = 6;
+// HANDHELD_RT.HANDHELD es varchar(4) (ej. HH1, HH2).
+export const MAX_HANDHELD_LENGTH = 4;
 
 export function normalizeEmail(value) {
   return String(value ?? '').trim().toLowerCase();
@@ -22,6 +24,11 @@ export function normalizeHost(value) {
     .replace(/\/+$/, '');
 }
 
+// 'https' solo si se escribió explícitamente "https://"; si no, 'http'.
+export function hostProtocol(value) {
+  return /^https:\/\//i.test(String(value ?? '').trim()) ? 'https' : 'http';
+}
+
 function isValidIpv4IfIpLike(host) {
   const hostname = host.split(':')[0];
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return true; // no es IP, se valida como dominio
@@ -35,7 +42,8 @@ function isValidPort(host) {
   return n >= 1 && n <= 65535;
 }
 
-export function validateConnectionForm({ host, handheld, email, password }) {
+// registro: true exige también `nombres` (solo para registrarse en el servidor).
+export function validateConnectionForm({ host, handheld, email, password, nombres, registro = false }) {
   const errors = {};
 
   const h = normalizeHost(host);
@@ -44,7 +52,11 @@ export function validateConnectionForm({ host, handheld, email, password }) {
     errors.host = 'Dirección no válida (ej. 192.168.1.150:8080)';
   }
 
-  if (!normalizeHandheld(handheld)) errors.handheld = 'El nombre de la handheld es obligatorio';
+  const hh = normalizeHandheld(handheld);
+  if (!hh) errors.handheld = 'El código de la handheld es obligatorio';
+  else if (hh.length > MAX_HANDHELD_LENGTH) errors.handheld = `Máximo ${MAX_HANDHELD_LENGTH} caracteres (ej. HH1)`;
+
+  if (registro && !String(nombres ?? '').trim()) errors.nombres = 'El nombre es obligatorio para registrarse';
 
   const e = normalizeEmail(email);
   if (!e) errors.email = 'El correo es obligatorio';

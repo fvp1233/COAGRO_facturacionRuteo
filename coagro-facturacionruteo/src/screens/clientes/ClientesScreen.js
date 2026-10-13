@@ -10,6 +10,10 @@ import ConsultaView from './ConsultaView';
 import SincronizarView from './SincronizarView';
 import ClienteOpcionesView from './ClienteOpcionesView';
 import VisitaRegistroView from './VisitaRegistroView';
+import CobrosView from './CobrosView';
+import CobroDocumentosView from './CobroDocumentosView';
+import ConsultaDocumentosView from './ConsultaDocumentosView';
+import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { colors } from '../../theme';
 
@@ -37,6 +41,12 @@ export default function ClientesScreen({ onBack }) {
   const [registro, setRegistro] = useState(null);
   // Último cliente seleccionado en la tabla ({ cliente, ruta }).
   const [seleccion, setSeleccion] = useState(null);
+  // Opción abierta desde las opciones del cliente ('cobros' | 'consultar'); null = menú de opciones.
+  const [opcionActiva, setOpcionActiva] = useState(null);
+  // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
+  const [cobro, setCobro] = useState(null);
+  // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'documentos'); null = menú.
+  const [consulta, setConsulta] = useState(null);
 
   // El botón Validar del menú inferior abre las opciones del cliente seleccionado.
   const handleTab = (key) => {
@@ -91,10 +101,20 @@ export default function ClientesScreen({ onBack }) {
   // Al salir de Validar se pregunta si se registra la visita.
   const handleSalirValidar = () => {
     Alert.alert('Registro de visita', '¿Desea registrar la visita del cliente?', [
-      { text: 'No', style: 'cancel', onPress: () => setValidando(null) },
+      {
+        text: 'No',
+        style: 'cancel',
+        onPress: () => {
+          setOpcionActiva(null);
+          setValidando(null);
+        },
+      },
       {
         text: 'Sí',
-        onPress: () => setRegistro({ ...validando, fin: new Date() }),
+        onPress: () => {
+          setOpcionActiva(null);
+          setRegistro({ ...validando, fin: new Date() });
+        },
       },
     ]);
   };
@@ -130,12 +150,66 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  if (validando && opcionActiva === 'cobros' && cobro) {
+    return (
+      <CobroDocumentosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        moneda={cobro.moneda}
+        tipoPago={cobro.tipoPago}
+        onBack={() => setCobro(null)}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'cobros') {
+    return (
+      <CobrosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onContinuar={setCobro}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'consultar' && consulta === 'documentos') {
+    return (
+      <ConsultaDocumentosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setConsulta(null)}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'consultar') {
+    return (
+      <ClienteOpcionesView
+        title="Menú Consultar"
+        opciones={CONSULTAS}
+        columns={3}
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onOpcion={(opcion) => {
+          if (opcion.id === 'documentos') setConsulta(opcion.id);
+          else Alert.alert(opcion.title, 'Próximamente.');
+        }}
+      />
+    );
+  }
+
   if (validando) {
     return (
       <ClienteOpcionesView
         cliente={validando.cliente}
         ruta={validando.ruta}
         onBack={handleSalirValidar}
+        onOpcion={(opcion) => {
+          if (opcion.id === 'cobros' || opcion.id === 'consultar') setOpcionActiva(opcion.id);
+          else Alert.alert(opcion.title, 'Próximamente.');
+        }}
       />
     );
   }

@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 
 import { generateSalt, hashPassword, verifyPassword } from './security';
-import { normalizeEmail, normalizeHandheld, normalizeHost } from '../utils/validators';
+import { hostProtocol, normalizeEmail, normalizeHandheld, normalizeHost } from '../utils/validators';
 
 // Archivo JSON con la configuración del primer uso (conexión + primer usuario).
 // Vive en el directorio de documentos de la app (no lo borra el sistema).
@@ -34,6 +34,8 @@ export async function readConfig() {
 }
 
 // Crea el JSON con el primer usuario. La contraseña se guarda como sal + hash.
+// Se llama solo después de un login en línea exitoso: el login offline queda limitado a
+// usuarios que el servidor ya validó.
 export async function createConfig({ host, handheld, email, password }) {
   const salt = await generateSalt();
   const config = {
@@ -41,6 +43,7 @@ export async function createConfig({ host, handheld, email, password }) {
     createdAt: new Date().toISOString(),
     connection: {
       host: normalizeHost(host),
+      protocol: hostProtocol(host),
       handheld: normalizeHandheld(handheld),
     },
     user: {

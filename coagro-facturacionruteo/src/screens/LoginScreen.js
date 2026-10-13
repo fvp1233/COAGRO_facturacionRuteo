@@ -7,11 +7,13 @@ import PrimaryButton from '../components/ui/PrimaryButton';
 import Checkbox from '../components/ui/Checkbox';
 import LinkText from '../components/ui/LinkText';
 import { checkCredentials } from '../services/localConfig';
+import { setSession } from '../services/session';
 import { initDatabase } from '../db/database';
 import { validateLoginForm } from '../utils/validators';
 import { spacing } from '../theme';
 
-// Valida contra el JSON local. Si es correcto, crea/abre la base SQLite (aplica el
+// Valida contra el JSON local (funciona sin internet). Si es correcto, guarda las credenciales
+// en memoria (para renovar el token al sincronizar), crea/abre la base SQLite (aplica el
 // esquema de migrations.js) y deja entrar a la app.
 export default function LoginScreen({ onLogin, onDevReset }) {
   const [usuario, setUsuario] = useState('');
@@ -34,6 +36,7 @@ export default function LoginScreen({ onLogin, onDevReset }) {
         setFormError('Usuario o contraseña incorrectos');
         return;
       }
+      setSession({ email: usuario, password });
       await initDatabase();
       onLogin?.(config);
     } catch {

@@ -8,16 +8,24 @@ import OptionTile from '../../components/consulta/OptionTile';
 import { OPCIONES_CLIENTE } from '../../constants/opcionesCliente';
 import { colors, radius, spacing } from '../../theme';
 
-const COLUMNS = 2;
 const ACCENT = '#15803D';
 
 // Página que se abre al validar un cliente: muestra las operaciones disponibles para él.
-export default function ClienteOpcionesView({ cliente, ruta, onBack, onOpcion }) {
+// También sirve para submenús del cliente (p. ej. Menú Consultar) pasando title/opciones/columns.
+export default function ClienteOpcionesView({
+  cliente,
+  ruta,
+  onBack,
+  onOpcion,
+  title = 'Validar cliente',
+  opciones = OPCIONES_CLIENTE,
+  columns = 2,
+}) {
   const insets = useSafeAreaInsets();
 
   const rows = [];
-  for (let i = 0; i < OPCIONES_CLIENTE.length; i += COLUMNS) {
-    const row = OPCIONES_CLIENTE.slice(i, i + COLUMNS);
+  for (let i = 0; i < opciones.length; i += columns) {
+    const row = opciones.slice(i, i + columns);
     rows.push(row);
   }
 
@@ -29,7 +37,7 @@ export default function ClienteOpcionesView({ cliente, ruta, onBack, onOpcion })
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Validar cliente" onBack={onBack} />
+      <CenteredHeader title={title} onBack={onBack} />
 
       <View style={styles.content}>
         <View style={styles.clientCard}>
@@ -55,7 +63,9 @@ export default function ClienteOpcionesView({ cliente, ruta, onBack, onOpcion })
                   onPress={() => handlePress(opcion)}
                 />
               ))}
-              {row.length < COLUMNS ? <View style={styles.cell} /> : null}
+              {Array.from({ length: columns - row.length }, (_, i) => (
+                <View key={`vacio-${i}`} style={styles.cell} />
+              ))}
             </View>
           ))}
         </View>

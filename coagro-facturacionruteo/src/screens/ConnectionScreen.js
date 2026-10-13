@@ -4,37 +4,67 @@ import { StyleSheet, Text } from 'react-native';
 import AuthLayout from '../components/auth/AuthLayout';
 import TextField from '../components/ui/TextField';
 import PrimaryButton from '../components/ui/PrimaryButton';
+import LinkText from '../components/ui/LinkText';
 import { createConfig } from '../services/localConfig';
-import { validateConnectionForm } from '../utils/validators';
+import { loginEnLinea, registrarUsuario } from '../services/mobileAuth';
+import { hostProtocol, MAX_HANDHELD_LENGTH, normalizeHost, validateConnectionForm } from '../utils/validators';
 import { spacing } from '../theme';
 
 // Pantalla de primer uso: se muestra solo si el dispositivo aún no tiene configuración.
-// Todos los campos son obligatorios. Al guardar se crea el JSON y se pasa al login.
+// - "Ya tengo cuenta": login en línea (/fr/mobile/login). Solo si el servidor lo acepta se crea
+//   el JSON local (para el login offline) y se guarda el token; luego se pasa al login.
+// - "Registrarme": crea el usuario en el servidor (/fr/mobile/registro); queda pendiente hasta
+//   que un Admin lo apruebe en la web. No crea el JSON.
 export default function ConnectionScreen({ onConnect, onDevReset }) {
+  const [registro, setRegistro] = useState(false);
   const [host, setHost] = useState('');
   const [handheld, setHandheld] = useState('');
+  const [nombres, setNombres] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [aviso, setAviso] = useState('');
 
   const clearError = (field) => setErrors((prev) => ({ ...prev, [field]: undefined }));
 
+  const cambiarModo = () => {
+    setRegistro((v) => !v);
+    setErrors({});
+    setSaveError('');
+    setAviso('');
+  };
+
   const handleSubmit = async () => {
-    const found = validateConnectionForm({ host, handheld, email, password });
+    const found = validateConnectionForm({ host, handheld, email, password, nombres, registro });
     setErrors(found);
     setSaveError('');
+    setAviso('');
     if (Object.keys(found).length > 0) return;
 
+    const connection = { host: normalizeHost(host), protocol: hostProtocol(host) };
     setSaving(true);
+    try {
+      if (registro) {
+        await registrarUsuario(connection, { email, nombres, password, handheld });
+        setRegistro(false);
+        setAviso('Tu cuenta quedó pendiente de aprobación. Cuando un administrador la apruebe, inicia sesión con "Ya tengo cuenta".');
+        return;
+      }
+      await loginEnLinea({ email, password, handheld }, connection);
+    } catch (e) {
+      setSaveError(e?.message || 'No se pudo conectar con el servidor.');
+      return;
+    } finally {
+      setSaving(false);
+    }
+
     try {
       await createConfig({ host, handheld, email, password });
       onConnect();
     } catch {
       setSaveError('No se pudo guardar la configuración en el dispositivo. Intenta de nuevo.');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -43,8 +73,8 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
       headerTitle="¡Bienvenido!"
       headerSubtitle="Configura la conexión de tu equipo para el sistema de facturación de ruteo y despachos."
       logoFramed
-      title="Conectar Terminal"
-      subtitle="Todos los campos son obligatorios"
+      title={registro ? 'Registrarme' : 'Conectar Terminal'}
+      subtitle={registro ? 'Un administrador debe aprobar tu cuenta' : 'Inicia sesión con tu cuenta aprobada'}
       footerText="¿Problemas con la red o el equipo?"
       footerLink="Solicitar asistencia de soporte técnico"
       onLogoLongPress={onDevReset}
@@ -65,18 +95,34 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
       />
 
       <TextField
-        label="Handheld (Nombre del dispositivo)"
+        label="Handheld (código del dispositivo)"
         icon="cellphone"
-        placeholder="ej. HH-VH109-NORTE"
+        placeholder="ej. HH1"
         value={handheld}
         onChangeText={(v) => {
           setHandheld(v);
           clearError('handheld');
         }}
         error={errors.handheld}
+        maxLength={MAX_HANDHELD_LENGTH}
         autoCapitalize="characters"
         autoCorrect={false}
       />
+
+      {registro ? (
+        <TextField
+          label="Nombre completo"
+          icon="account-outline"
+          placeholder="ej. Juan Pérez"
+          value={nombres}
+          onChangeText={(v) => {
+            setNombres(v);
+            clearError('nombres');
+          }}
+          error={errors.nombres}
+          autoCapitalize="words"
+        />
+      ) : null}
 
       <TextField
         label="Correo del usuario"
@@ -106,14 +152,21 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
         secure
       />
 
+      {aviso ? <Text style={styles.aviso}>{aviso}</Text> : null}
       {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
 
       <PrimaryButton
-        title="Conectar al Sistema"
-        icon="arrow-forward"
+        title={registro ? 'Enviar registro' : 'Conectar al Sistema'}
+        icon={registro ? 'person-add' : 'arrow-forward'}
         onPress={handleSubmit}
         loading={saving}
         style={styles.submit}
+      />
+
+      <LinkText
+        title={registro ? 'Ya tengo cuenta' : '¿No tienes cuenta? Registrarme'}
+        onPress={saving ? undefined : cambiarModo}
+        style={styles.modo}
       />
     </AuthLayout>
   );
@@ -122,6 +175,15 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
 const styles = StyleSheet.create({
   submit: {
     marginTop: spacing.md,
+  },
+  modo: {
+    alignSelf: 'center',
+    marginTop: spacing.md,
+  },
+  aviso: {
+    fontSize: 13,
+    color: '#15803D',
+    marginBottom: spacing.sm,
   },
   saveError: {
     fontSize: 13,

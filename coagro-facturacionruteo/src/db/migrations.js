@@ -51,4 +51,10 @@ export const migrations = [
       );
     `);
   },
+
+  // v5: documentos pendientes de cobro (alCXC_PEN_COB). El endpoint de cobros también manda
+  // INDICADOR_FACTURACION, que no viene en el esquema de Exactus.
+  async (db) => {
+    await db.execAsync('ALTER TABLE alCXC_PEN_COB ADD COLUMN INDICADOR_FACTURACION TEXT;');
+  },
 ];
