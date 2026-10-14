@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { syncClientes } from '../services/syncClientes';
 import { syncArticulos } from '../services/syncArticulos';
 import { syncCobros } from '../services/syncCobros';
+import { syncConsecutivos } from '../services/syncConsecutivos';
 import { refrescarSesion } from '../services/mobileAuth';
 import { isNetworkError } from '../services/api';
 import { contarClientes, getUltimaSincronizacion } from '../repositories/clientes';
@@ -28,7 +29,7 @@ function formatFecha(iso) {
 }
 
 // Sincronización de datos. "Cargar datos" descarga las tablas del sistema en línea a la base local
-// (clientes, artículos y documentos por cobrar; aquí se irán sumando más tablas). Los otros botones aún no funcionan.
+// (clientes, artículos, documentos por cobrar y consecutivos; aquí se irán sumando más tablas). Los otros botones aún no funcionan.
 export default function DatosScreen({ module, onBack }) {
   const insets = useSafeAreaInsets();
   const [ultima, setUltima] = useState(null);
@@ -64,11 +65,13 @@ export default function DatosScreen({ module, onBack }) {
       const clientes = await syncClientes();
       const articulos = await syncArticulos();
       const cobros = await syncCobros();
+      const consecutivos = await syncConsecutivos();
       setResumen({
         ...clientes,
         articulos: articulos.articulos,
         documentos: cobros.documentos,
-        omitidos: clientes.omitidos + articulos.omitidos + cobros.omitidos,
+        consecutivos: consecutivos.consecutivos,
+        omitidos: clientes.omitidos + articulos.omitidos + cobros.omitidos + consecutivos.omitidos,
       });
     } catch (e) {
       setError(
@@ -139,7 +142,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.documentos} documentos por cobrar.
+              Carga completa: {resumen.clientes} clientes, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.documentos} documentos por cobrar, {resumen.consecutivos} consecutivos de ruta.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>

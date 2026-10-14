@@ -16,6 +16,7 @@ export const PATHS = {
   syncClientes: '/fr/sync/clientes',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
+  syncConsecutivos: '/fr/sync/consecutivos',
 };
 
 // Tiempo máximo de espera por petición.
