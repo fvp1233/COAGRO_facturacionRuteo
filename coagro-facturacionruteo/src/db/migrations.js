@@ -57,4 +57,63 @@ export const migrations = [
   async (db) => {
     await db.execAsync('ALTER TABLE alCXC_PEN_COB ADD COLUMN INDICADOR_FACTURACION TEXT;');
   },
+
+  // v6: rutas de la handheld con su grupo de artículos y bodegas (llegan en /fr/sync/articulos).
+  // BODEGA es el código de ruteo (puede ser un alias, ej. "CLI1"); BODEGA_ERP es la bodega real
+  // del ERP (ej. "10") y es la que se cruza con ARTICULO_EXISTENCIA.BODEGA. Puede venir null si
+  // la bodega de la ruta está mal configurada.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS RUTA_ARTICULO_RT (
+        RUTA           TEXT PRIMARY KEY NOT NULL,
+        GRUPO_ARTICULO TEXT,
+        BODEGA         TEXT,
+        BODEGA_ERP     TEXT
+      );
+    `);
+  },
+
+  // v7: CLIENTE_CIA con NOM_CTO, NUM_TEL y LST_PRE opcionales: el backend puede mandarlos null y
+  // no se deben guardar valores inventados ('' / 0). SQLite no permite quitar NOT NULL con ALTER:
+  // se recrea la tabla y se copian las filas.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE CLIENTE_CIA_V7 (
+        "COD_CIA" TEXT,
+        "COD_CLT" TEXT NOT NULL,
+        "COD_TIP_CL" TEXT,
+        "NOM_CTO" TEXT,
+        "NUM_TEL" TEXT,
+        "LIM_CRE" REAL NOT NULL,
+        "DIA_CRE" INTEGER NOT NULL,
+        "LST_PRE" INTEGER,
+        "POR_EXC_VT" REAL,
+        "POR_EXC_CS" REAL,
+        "IND_MON" TEXT,
+        "COD_CND" TEXT,
+        "COD_PAIS" TEXT,
+        "DIR_EMB_DEFAULT" TEXT,
+        "DESCUENTO" REAL NOT NULL,
+        "BODEGA_CONSIGNA" TEXT NOT NULL DEFAULT 'ND',
+        "MULT_MON" TEXT,
+        "ACEPTA_FRACCIONES" TEXT,
+        "TIPO_CONTRIBUYENTE" TEXT,
+        "CONTRIBUYENTE" TEXT,
+        "DIVISION_GEOGRAFICA1" TEXT,
+        "DIVISION_GEOGRAFICA2" TEXT,
+        "REGIMEN_TRIB" TEXT,
+        "LOCALIZACION_CONSIGNA" TEXT DEFAULT 'ND',
+        "CODIGO" TEXT,
+        "RAZONSOCIAL" TEXT,
+        "USA_MONTO_TOPE" TEXT NOT NULL DEFAULT 'N',
+        "MONTO_TOPE" REAL,
+        "CATEGORIA_TIPO_NIT" TEXT,
+        "SUBTIPODOC" TEXT,
+        PRIMARY KEY ("COD_CLT")
+      );
+      INSERT INTO CLIENTE_CIA_V7 SELECT * FROM CLIENTE_CIA;
+      DROP TABLE CLIENTE_CIA;
+      ALTER TABLE CLIENTE_CIA_V7 RENAME TO CLIENTE_CIA;
+    `);
+  },
 ];

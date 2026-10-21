@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../components/ui/CenteredHeader';
 import OptionTile from '../components/consulta/OptionTile';
 import ParametrosSistemaView from './parametros/ParametrosSistemaView';
+import ParametrosDispositivoView from './parametros/ParametrosDispositivoView';
 import { PARAMETROS } from '../constants/parametros';
 import { colors, radius, spacing } from '../theme';
 
@@ -16,6 +17,7 @@ const ACCENT = '#4F46E5';
 // Parámetros que ya tienen pantalla propia.
 const VISTAS = {
   sistema: ParametrosSistemaView,
+  dispositivo: ParametrosDispositivoView,
 };
 
 // Módulo Parámetros: menú con las opciones de configuración del sistema y del dispositivo.

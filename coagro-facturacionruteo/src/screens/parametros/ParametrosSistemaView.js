@@ -7,6 +7,7 @@ import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import { getRutas } from '../../repositories/clientes';
 import { getConsecutivosRuta } from '../../repositories/consecutivos';
+import { getRutaActiva } from '../../repositories/rutaActiva';
 import { colors, radius, spacing } from '../../theme';
 
 // Campos que se muestran, en pares (dos por fila).
@@ -40,14 +41,14 @@ export default function ParametrosSistemaView({ onBack }) {
 
   const rutaCodigo = rutas.find((r) => r.label === rutaLabel)?.codigo ?? null;
 
-  // Rutas disponibles en el equipo.
+  // Rutas disponibles en el equipo; empieza en la ruta activa.
   useEffect(() => {
     let cancelado = false;
-    getRutas()
-      .then((lista) => {
+    Promise.all([getRutas(), getRutaActiva()])
+      .then(([lista, activa]) => {
         if (cancelado) return;
         setRutas(lista);
-        setRutaLabel(lista[0]?.label ?? '');
+        setRutaLabel((lista.find((r) => r.codigo === activa?.codigo) ?? lista[0])?.label ?? '');
         if (lista.length === 0) setCargando(false);
       })
       .catch(() => {

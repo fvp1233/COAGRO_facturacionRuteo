@@ -9,6 +9,8 @@ import { syncCobros } from '../services/syncCobros';
 import { syncConsecutivos } from '../services/syncConsecutivos';
 import { refrescarSesion } from '../services/mobileAuth';
 import { isNetworkError } from '../services/api';
+import { esErrorVinculada } from '../services/deviceFirma';
+import FirmaEquipo from '../components/ui/FirmaEquipo';
 import { contarClientes, getUltimaSincronizacion } from '../repositories/clientes';
 import { contarArticulos } from '../repositories/articulos';
 import { colors, radius, spacing } from '../theme';
@@ -38,6 +40,7 @@ export default function DatosScreen({ module, onBack }) {
   const [loading, setLoading] = useState(false);
   const [resumen, setResumen] = useState(null);
   const [error, setError] = useState('');
+  const [vinculada, setVinculada] = useState(false);
 
   const refrescar = useCallback(async () => {
     try {
@@ -57,6 +60,7 @@ export default function DatosScreen({ module, onBack }) {
     if (loading) return;
     setLoading(true);
     setError('');
+    setVinculada(false);
     setResumen(null);
     try {
       // Valida el token (renovándolo si venció) y actualiza las rutas de la handheld antes de bajar datos.
@@ -74,6 +78,9 @@ export default function DatosScreen({ module, onBack }) {
         omitidos: clientes.omitidos + articulos.omitidos + cobros.omitidos + consecutivos.omitidos,
       });
     } catch (e) {
+      // La renovación del token se intenta una sola vez; si la handheld ya está ligada a otro
+      // equipo, la carga se detiene aquí y se muestra la firma de este equipo.
+      setVinculada(esErrorVinculada(e));
       setError(
         isNetworkError(e)
           ? 'Debes estar conectado a internet para descargar los datos. Revisa tu conexión e intenta de nuevo.'
@@ -153,6 +160,8 @@ export default function DatosScreen({ module, onBack }) {
             <Text style={styles.failText}>{error}</Text>
           </View>
         ) : null}
+
+        {vinculada ? <FirmaEquipo label="Firma de este equipo (compártela con soporte)" /> : null}
       </ScrollView>
     </View>
   );

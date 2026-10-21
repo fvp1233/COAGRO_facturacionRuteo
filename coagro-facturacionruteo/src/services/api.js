@@ -1,3 +1,4 @@
+import { getDeviceFirma } from './deviceFirma';
 import { readConfig } from './localConfig';
 import { getSession } from './session';
 import { getToken, saveToken } from './tokenStore';
@@ -150,8 +151,9 @@ async function reautenticar(base) {
   if (!email || !password || !config?.connection?.handheld) {
     throw new ApiError('Tu sesión en el servidor venció. Cierra sesión y vuelve a entrar.', { code: 'AUTH' });
   }
+  // La firma liga la handheld a este equipo; sin ella el backend rechaza el login.
   const json = await send('POST', PATHS.login, {
-    body: { email: normalizeEmail(email), password, handheld: config.connection.handheld },
+    body: { email: normalizeEmail(email), password, handheld: config.connection.handheld, firma: await getDeviceFirma() },
     base,
     auth: false,
   });

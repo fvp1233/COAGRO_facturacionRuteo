@@ -28,6 +28,16 @@ export async function syncClientes() {
   // Estados de visita (EFECT_VISITA_RT). Si el servidor aún no los manda, la tabla local no se toca.
   const traeEfectividades = Array.isArray(data.efectividades);
   const efectividades = conClaves(data.efectividades, ['EFECT_VISITA']);
+  // Datos comerciales del cliente (CLIENTE_CIA), tipos de cliente (alFAC_TIP_CLT) y niveles de
+  // precio (NIVEL_LISTA). Opcionales: si el servidor no los manda, las tablas no se tocan.
+  // LST_PRE / LISTA los numera el backend en cada sincronización: CLIENTE_CIA y NIVEL_LISTA se
+  // reemplazan SIEMPRE juntos (si falta uno de los dos arreglos, no se toca ninguno).
+  // En pedidos/facturas se guarda NIVEL_PRECIO (el nombre), nunca LST_PRE.
+  const traeComerciales = Array.isArray(data.clientesCia) && Array.isArray(data.nivelesPrecio);
+  const clientesCia = traeComerciales ? conClaves(data.clientesCia, ['COD_CLT']) : [];
+  const nivelesPrecio = traeComerciales ? conClaves(data.nivelesPrecio, ['NIVEL_PRECIO', 'LISTA', 'MONEDA']) : [];
+  const traeTiposCliente = Array.isArray(data.tiposCliente);
+  const tiposCliente = conClaves(data.tiposCliente, ['COD_TIP_CL']);
   const omitidos =
     (Array.isArray(data.rutas) ? data.rutas.length : 0) - rutas.length +
     data.clientes.length - clientes.length +
@@ -42,6 +52,49 @@ export async function syncClientes() {
     await db.runAsync('DELETE FROM alFAC_RUTA_ORDEN');
     await db.runAsync('DELETE FROM CLIENTE_UBICACION');
     if (traeEfectividades) await db.runAsync('DELETE FROM EFECT_VISITA_RT');
+    if (traeComerciales) {
+      await db.runAsync('DELETE FROM CLIENTE_CIA');
+      await db.runAsync('DELETE FROM NIVEL_LISTA');
+    }
+    if (traeTiposCliente) await db.runAsync('DELETE FROM alFAC_TIP_CLT');
+
+    for (const c of clientesCia) {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO CLIENTE_CIA
+           (COD_CIA, COD_CLT, COD_TIP_CL, NOM_CTO, NUM_TEL, LIM_CRE, DIA_CRE, LST_PRE,
+            POR_EXC_VT, POR_EXC_CS, IND_MON, DESCUENTO)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          text(c.COD_CIA),
+          textOr(c.COD_CLT),
+          text(c.COD_TIP_CL),
+          text(c.NOM_CTO),
+          text(c.NUM_TEL),
+          num(c.LIM_CRE) ?? 0,
+          num(c.DIA_CRE) ?? 0,
+          num(c.LST_PRE),
+          num(c.POR_EXC_VT),
+          num(c.POR_EXC_CS),
+          text(c.IND_MON),
+          num(c.DESCUENTO) ?? 0,
+        ]
+      );
+    }
+
+    for (const t of tiposCliente) {
+      await db.runAsync('INSERT OR REPLACE INTO alFAC_TIP_CLT (COD_CIA, COD_TIP_CL, DES_TIP_CL) VALUES (?, ?, ?)', [
+        text(t.COD_CIA),
+        textOr(t.COD_TIP_CL),
+        textOr(t.DES_TIP_CL),
+      ]);
+    }
+
+    for (const n of nivelesPrecio) {
+      await db.runAsync(
+        'INSERT OR REPLACE INTO NIVEL_LISTA (NIVEL_PRECIO, COMPANIA, LISTA, MONEDA) VALUES (?, ?, ?, ?)',
+        [textOr(n.NIVEL_PRECIO), text(n.COMPANIA), num(n.LISTA), textOr(n.MONEDA)]
+      );
+    }
 
     for (const r of rutas) {
       await db.runAsync(

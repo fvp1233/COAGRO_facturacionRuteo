@@ -2,10 +2,8 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import DataTable from '../ui/DataTable';
+import { formatCantidad } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
-
-// Cantidades con hasta 2 decimales (sin ceros sobrantes): 12 -> "12", 2.5 -> "2.5".
-const formatCantidad = (n) => Number(n ?? 0).toLocaleString('es', { maximumFractionDigits: 2 });
 
 const Cantidad = ({ value }) => (
   <Text style={[styles.qty, value <= 0 && styles.qtyZero]}>{formatCantidad(value)}</Text>

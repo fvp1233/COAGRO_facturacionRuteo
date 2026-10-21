@@ -8,7 +8,8 @@ import CenteredHeader from '../../components/ui/CenteredHeader';
 import Checkbox from '../../components/ui/Checkbox';
 import InventarioTable from '../../components/reportes/InventarioTable';
 import SearchBar from '../../components/ui/SearchBar';
-import { getInventario } from '../../repositories/articulos';
+import { getAvisoInventario, getInventario } from '../../repositories/articulos';
+import { getRutaActiva } from '../../repositories/rutaActiva';
 import { colors, radius, spacing } from '../../theme';
 import { normalizar } from '../../utils/text';
 
@@ -27,16 +28,29 @@ export default function InventarioReporteView({ onBack }) {
   const [articulos, setArticulos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+  const [ruta, setRuta] = useState(null);
   const [searchMode, setSearchMode] = useState(SEARCH_MODES[0].key);
   const [query, setQuery] = useState('');
 
+  // Solo el grupo y la bodega del ERP de la ruta activa.
   useEffect(() => {
     let cancelado = false;
     setCargando(true);
     setError('');
-    getInventario({ incluirSinExistencia })
-      .then((lista) => {
-        if (!cancelado) setArticulos(lista);
+    (async () => {
+      const activa = await getRutaActiva();
+      const [lista, mensaje] = await Promise.all([
+        getInventario(activa, { incluirSinExistencia }),
+        getAvisoInventario(activa),
+      ]);
+      return { activa, lista, mensaje };
+    })()
+      .then(({ activa, lista, mensaje }) => {
+        if (cancelado) return;
+        setRuta(activa);
+        setArticulos(lista);
+        setAviso(mensaje ?? '');
       })
       .catch(() => {
         if (!cancelado) setError('No se pudo leer el inventario de la base local.');
@@ -80,7 +94,14 @@ export default function InventarioReporteView({ onBack }) {
           </View>
         </View>
 
+        {ruta ? (
+          <Text style={styles.rutaInfo}>
+            Ruta {ruta.label} · Bodega {ruta.bodegaErp ?? '—'}
+          </Text>
+        ) : null}
+
         {error ? <Text style={styles.warning}>{error}</Text> : null}
+        {!error && aviso ? <Text style={styles.warning}>{aviso}</Text> : null}
 
         {cargando ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
@@ -119,6 +140,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#334155',
+  },
+  rutaInfo: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   warning: {
     fontSize: 13,

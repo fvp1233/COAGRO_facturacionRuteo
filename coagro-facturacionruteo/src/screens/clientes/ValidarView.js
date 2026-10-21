@@ -10,6 +10,7 @@ import ClientTable from '../../components/clientes/ClientTable';
 import UbicacionMenu from '../../components/clientes/UbicacionMenu';
 import { DIAS, DIAS_FILTRO, ESTADOS } from '../../data/clientes';
 import { getClientesRuta, getRutas, getUbicacionCliente, guardarUbicacionCliente } from '../../repositories/clientes';
+import { getRutaActiva } from '../../repositories/rutaActiva';
 import { colors, radius, spacing } from '../../theme';
 import { normalizar } from '../../utils/text';
 
@@ -55,11 +56,14 @@ export default function ValidarView({
     (async () => {
       try {
         const lista = await getRutas();
+        const activa = await getRutaActiva();
         if (cancelado) return;
         setRutas(lista);
+        // Se respeta la ruta ya elegida; si no, la que se traía o la ruta activa.
         setRutaLabel((actual) => {
           if (lista.some((r) => r.label === actual)) return actual;
-          const inicial = lista.find((r) => r.codigo === initialRutaCodigo);
+          const inicial =
+            lista.find((r) => r.codigo === initialRutaCodigo) ?? lista.find((r) => r.codigo === activa?.codigo);
           return inicial?.label ?? lista[0]?.label ?? '';
         });
         setError('');

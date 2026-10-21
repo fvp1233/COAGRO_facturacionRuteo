@@ -1,4 +1,5 @@
 import { ApiError, buildBaseUrl, getJson, postJson } from './api';
+import { getDeviceFirma } from './deviceFirma';
 import { saveToken } from './tokenStore';
 import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
@@ -13,7 +14,13 @@ import { normalizeEmail, normalizeHandheld } from '../utils/validators';
 export async function registrarUsuario(connection, { email, nombres, password, handheld }) {
   const json = await postJson(
     PATHS.registro,
-    { email: normalizeEmail(email), nombres: nombres.trim(), password, handheld: normalizeHandheld(handheld) },
+    {
+      email: normalizeEmail(email),
+      nombres: nombres.trim(),
+      password,
+      handheld: normalizeHandheld(handheld),
+      firma: await getDeviceFirma(),
+    },
     { base: buildBaseUrl(connection), auth: false }
   );
   return json.result;
@@ -24,7 +31,7 @@ export async function registrarUsuario(connection, { email, nombres, password, h
 export async function loginEnLinea({ email, password, handheld }, connection) {
   const json = await postJson(
     PATHS.login,
-    { email: normalizeEmail(email), password, handheld: normalizeHandheld(handheld) },
+    { email: normalizeEmail(email), password, handheld: normalizeHandheld(handheld), firma: await getDeviceFirma() },
     { base: connection ? buildBaseUrl(connection) : undefined, auth: false }
   );
   const result = json?.result;

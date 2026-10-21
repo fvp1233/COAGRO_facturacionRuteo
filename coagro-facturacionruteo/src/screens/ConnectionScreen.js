@@ -5,6 +5,8 @@ import AuthLayout from '../components/auth/AuthLayout';
 import TextField from '../components/ui/TextField';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import LinkText from '../components/ui/LinkText';
+import FirmaEquipo from '../components/ui/FirmaEquipo';
+import { esErrorVinculada } from '../services/deviceFirma';
 import { createConfig } from '../services/localConfig';
 import { loginEnLinea, registrarUsuario } from '../services/mobileAuth';
 import { hostProtocol, MAX_HANDHELD_LENGTH, normalizeHost, validateConnectionForm } from '../utils/validators';
@@ -26,6 +28,8 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [aviso, setAviso] = useState('');
+  // La handheld ya está ligada a otro equipo: se muestra la firma de este para soporte.
+  const [vinculada, setVinculada] = useState(false);
 
   const clearError = (field) => setErrors((prev) => ({ ...prev, [field]: undefined }));
 
@@ -34,6 +38,7 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
     setErrors({});
     setSaveError('');
     setAviso('');
+    setVinculada(false);
   };
 
   const handleSubmit = async () => {
@@ -41,6 +46,7 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
     setErrors(found);
     setSaveError('');
     setAviso('');
+    setVinculada(false);
     if (Object.keys(found).length > 0) return;
 
     const connection = { host: normalizeHost(host), protocol: hostProtocol(host) };
@@ -54,7 +60,9 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
       }
       await loginEnLinea({ email, password, handheld }, connection);
     } catch (e) {
+      // El equipo queda sin configurar (no se crea el JSON).
       setSaveError(e?.message || 'No se pudo conectar con el servidor.');
+      setVinculada(esErrorVinculada(e));
       return;
     } finally {
       setSaving(false);
@@ -154,6 +162,9 @@ export default function ConnectionScreen({ onConnect, onDevReset }) {
 
       {aviso ? <Text style={styles.aviso}>{aviso}</Text> : null}
       {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
+      {vinculada ? (
+        <FirmaEquipo label="Firma de este equipo (compártela con soporte)" style={styles.firma} />
+      ) : null}
 
       <PrimaryButton
         title={registro ? 'Enviar registro' : 'Conectar al Sistema'}
@@ -183,6 +194,9 @@ const styles = StyleSheet.create({
   aviso: {
     fontSize: 13,
     color: '#15803D',
+    marginBottom: spacing.sm,
+  },
+  firma: {
     marginBottom: spacing.sm,
   },
   saveError: {

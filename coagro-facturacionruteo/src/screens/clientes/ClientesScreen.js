@@ -13,6 +13,7 @@ import VisitaRegistroView from './VisitaRegistroView';
 import CobrosView from './CobrosView';
 import CobroDocumentosView from './CobroDocumentosView';
 import ConsultaDocumentosView from './ConsultaDocumentosView';
+import ConsultaClienteView from './ConsultaClienteView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { colors } from '../../theme';
@@ -47,9 +48,12 @@ export default function ClientesScreen({ onBack }) {
   const [cobro, setCobro] = useState(null);
   // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'documentos'); null = menú.
   const [consulta, setConsulta] = useState(null);
+  // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
+  const [consultaTab, setConsultaTab] = useState(null);
 
   // El botón Validar del menú inferior abre las opciones del cliente seleccionado.
   const handleTab = (key) => {
+    setConsultaTab(null);
     if (key === 'validar') {
       if (!seleccion) {
         setActiveTab('validar');
@@ -76,7 +80,20 @@ export default function ClientesScreen({ onBack }) {
           />
         );
       case 'consulta':
-        return <ConsultaView onBack={() => setActiveTab('validar')} />;
+        return (
+          <ConsultaView
+            onBack={() => setActiveTab('validar')}
+            onOpenConsulta={(opcion) => {
+              if (opcion.id !== 'cliente') {
+                Alert.alert(opcion.title, 'Próximamente.');
+              } else if (!seleccion) {
+                Alert.alert('Cliente', 'Selecciona un cliente de la tabla primero.');
+              } else {
+                setConsultaTab(opcion.id);
+              }
+            }}
+          />
+        );
       case 'sincronizar':
         return (
           <SincronizarView
@@ -173,6 +190,18 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  if (validando && opcionActiva === 'consultar' && consulta === 'cliente') {
+    return (
+      <ConsultaClienteView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
+    );
+  }
+
+  if (!validando && activeTab === 'consulta' && consultaTab === 'cliente' && seleccion) {
+    return (
+      <ConsultaClienteView cliente={seleccion.cliente} ruta={seleccion.ruta} onBack={() => setConsultaTab(null)} />
+    );
+  }
+
   if (validando && opcionActiva === 'consultar' && consulta === 'documentos') {
     return (
       <ConsultaDocumentosView
@@ -193,7 +222,7 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={() => setOpcionActiva(null)}
         onOpcion={(opcion) => {
-          if (opcion.id === 'documentos') setConsulta(opcion.id);
+          if (opcion.id === 'documentos' || opcion.id === 'cliente') setConsulta(opcion.id);
           else Alert.alert(opcion.title, 'Próximamente.');
         }}
       />

@@ -7,7 +7,7 @@ const text = (v) => (v === null || v === undefined ? null : String(v).trim());
 const textOr = (v, fallback = '') => text(v) ?? fallback;
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
-// Descarga artículos y existencias (bodegas) y los guarda en SQLite en UNA transacción:
+// Descarga rutas (grupo y bodegas), artículos y existencias y los guarda en SQLite en UNA transacción:
 // o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
 export async function syncArticulos() {
   const json = await getJson(PATHS.syncArticulos);
@@ -19,15 +19,35 @@ export async function syncArticulos() {
   const conClaves = (lista, claves) =>
     lista.filter((fila) => fila && typeof fila === 'object' && claves.every((k) => textOr(fila[k]) !== ''));
   const articulos = conClaves(data.articulos, ['COD_ART', 'GRP_ART']);
+  // existencias.BODEGA es la bodega del ERP: se cruza con RUTA_ARTICULO_RT.BODEGA_ERP.
   const existencias = conClaves(data.existencias, ['ARTICULO', 'BODEGA']);
+  // Rutas de la handheld (grupo de artículos y bodegas). Si el servidor no las manda, no se tocan.
+  const traeRutas = Array.isArray(data.rutas);
+  const rutas = traeRutas ? conClaves(data.rutas, ['RUTA']) : [];
   const omitidos =
-    data.articulos.length - articulos.length + data.existencias.length - existencias.length;
+    data.articulos.length - articulos.length + data.existencias.length - existencias.length +
+    (traeRutas ? data.rutas.length - rutas.length : 0);
 
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
     // Los maestros se reemplazan completos con lo que manda el servidor.
     await db.runAsync('DELETE FROM ARTICULO');
     await db.runAsync('DELETE FROM ARTICULO_EXISTENCIA');
+    if (traeRutas) {
+      await db.runAsync('DELETE FROM RUTA_ARTICULO_RT');
+      for (const r of rutas) {
+        await db.runAsync(
+          'INSERT OR REPLACE INTO RUTA_ARTICULO_RT (RUTA, GRUPO_ARTICULO, BODEGA, BODEGA_ERP) VALUES (?, ?, ?, ?)',
+          [textOr(r.RUTA), text(r.GRUPO_ARTICULO), text(r.BODEGA), text(r.BODEGA_ERP) || null]
+        );
+      }
+      // Si la ruta activa ya no está asignada a la handheld, se quita (habrá que elegir otra).
+      await db.runAsync(
+        `DELETE FROM app_meta
+          WHERE key = 'ruta_activa'
+            AND value NOT IN (SELECT RUTA FROM RUTA_ARTICULO_RT)`
+      );
+    }
 
     for (const a of articulos) {
       await db.runAsync(
@@ -91,6 +111,7 @@ export async function syncArticulos() {
   });
 
   return {
+    rutas: rutas.length,
     articulos: articulos.length,
     existencias: existencias.length,
     omitidos,
