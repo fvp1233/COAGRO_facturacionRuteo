@@ -30,3 +30,32 @@ export async function getDocumentosCobro({ cliente, ruta }) {
     montoDocDolar: r.MONTO_DOLAR,
   }));
 }
+
+// Vencimientos para el Calendario: todos los documentos con saldo pendiente del equipo (todas las
+// rutas), con el nombre del cliente. vence = 'YYYY-MM-DD' (FEC_VEN sin hora), ordenados por cliente.
+// El nombre se busca solo por código (sin espacios de relleno): el documento puede ser de una ruta
+// distinta a la del cliente en CLIENTE.
+export async function getVencimientos() {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT p.COD_TIP_DC, p.NUM_DOC, p.COD_CLT, p.COD_ZON, p.CLASE_DOCUMENTO, p.SALDO_LOCAL, p.SALDO_DOLAR,
+            p.FEC_VEN, c.NOM_CLT
+       FROM alCXC_PEN_COB p
+       LEFT JOIN (SELECT TRIM(COD_CLT) AS COD_CLT, MIN(NOM_CLT) AS NOM_CLT FROM CLIENTE GROUP BY TRIM(COD_CLT)) c
+              ON c.COD_CLT = TRIM(p.COD_CLT)
+      WHERE COALESCE(p.SALDO_LOCAL, 0) > 0 OR COALESCE(p.SALDO_DOLAR, 0) > 0
+      ORDER BY p.FEC_VEN, c.NOM_CLT, p.NUM_DOC`
+  );
+
+  return rows.map((r) => ({
+    clave: `${r.COD_TIP_DC}|${r.COD_ZON}|${r.NUM_DOC}|${r.COD_CLT}`,
+    tipo: r.CLASE_DOCUMENTO ?? '',
+    documento: r.NUM_DOC,
+    cliente: r.COD_CLT,
+    nombre: r.NOM_CLT ?? r.COD_CLT,
+    ruta: r.COD_ZON,
+    saldoLocal: r.SALDO_LOCAL,
+    saldoDolar: r.SALDO_DOLAR,
+    vence: String(r.FEC_VEN ?? '').slice(0, 10),
+  }));
+}

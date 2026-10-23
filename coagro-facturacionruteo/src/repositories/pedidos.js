@@ -114,7 +114,7 @@ const insertar = (tabla, columnas) =>
 const r6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
 
 // Guarda un pedido nuevo en alFAC_ENC_PED + alFAC_DET_PED (SQLite local; se enviará al servidor
-// después: DOC_PRO = NULL). El número sale de RUTA_CONSECUT_RT.PEDIDO de la ruta y, si todo se
+// después: ENVIADO = 0, DOC_PRO = 'N'). El número sale de RUTA_CONSECUT_RT.PEDIDO de la ruta y, si todo se
 // guarda, el consecutivo avanza en 1. Todo en UNA transacción. Devuelve el número de pedido.
 //   ruta: código de la ruta del cliente (COD_ZON). bodega: bodega del ERP de la ruta activa.
 //   encabezado: lo de PedidoView. lineas: las agregadas en PedidoArticulosView.
@@ -155,7 +155,8 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       CLASE: 'F',
       COD_PAIS: encabezado.pais,
       NUM_ITM: lineas.length,
-      DOC_PRO: null,
+      // 'N' = aún no procesado; el backend lo usa en otro proceso (no debe ir null).
+      DOC_PRO: 'N',
       ESTADO: 'P',
       TIP_DOC: 'FAC',
       DESCUENTO_CASCADA: 'N',

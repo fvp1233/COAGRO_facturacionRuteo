@@ -19,6 +19,7 @@ import PedidoArticulosView from './PedidoArticulosView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
+import { getDocumentosCobro } from '../../repositories/cobros';
 import { colors } from '../../theme';
 
 // Estado de visita (EFECT_VISITA_RT) con que se registra la visita al guardar un pedido.
@@ -59,6 +60,19 @@ export default function ClientesScreen({ onBack }) {
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
   const [consultaTab, setConsultaTab] = useState(null);
 
+  // Aviso informativo al validar: el cliente tiene documentos pendientes de cobro (no bloquea nada).
+  const avisarDocumentosPendientes = ({ cliente, ruta }) => {
+    getDocumentosCobro({ cliente: cliente.codigo, ruta })
+      .then((docs) => {
+        if (!docs.length) return;
+        Alert.alert(
+          'Documentos pendientes',
+          `${cliente.nombre} tiene ${docs.length} ${docs.length === 1 ? 'documento pendiente' : 'documentos pendientes'} de cobro.`
+        );
+      })
+      .catch(() => {});
+  };
+
   // El botón Validar del menú inferior abre las opciones del cliente seleccionado.
   const handleTab = (key) => {
     setConsultaTab(null);
@@ -70,6 +84,7 @@ export default function ClientesScreen({ onBack }) {
       }
       // inicio = hora en que se abre el módulo Validar del cliente.
       setValidando({ ...seleccion, inicio: new Date() });
+      avisarDocumentosPendientes(seleccion);
       return;
     }
     setActiveTab(key);

@@ -78,7 +78,7 @@ export const MODULES = [
   {
     id: 'calendario',
     title: 'Calendario',
-    subtitle: 'Rutas y visitas hoy',
+    subtitle: 'Vencimientos de documentos',
     icon: { family: 'MaterialCommunityIcons', name: 'calendar-month-outline' },
     badge: { label: '5 hoy' },
     palette: {

@@ -9,6 +9,7 @@ import ClientesScreen from './src/screens/clientes/ClientesScreen';
 import DatosScreen from './src/screens/DatosScreen';
 import ReportesScreen from './src/screens/ReportesScreen';
 import ParametrosScreen from './src/screens/ParametrosScreen';
+import CalendarioScreen from './src/screens/CalendarioScreen';
 import { configExists, deleteConfig } from './src/services/localConfig';
 import { clearSession } from './src/services/session';
 import { clearToken } from './src/services/tokenStore';
@@ -75,6 +76,9 @@ export default function App() {
         }
         if (activeModule.id === 'parametros') {
           return <ParametrosScreen onBack={() => setScreen('home')} />;
+        }
+        if (activeModule.id === 'calendario') {
+          return <CalendarioScreen onBack={() => setScreen('home')} />;
         }
         if (activeModule.id === 'datos') {
           return <DatosScreen module={activeModule} onBack={() => setScreen('home')} />;

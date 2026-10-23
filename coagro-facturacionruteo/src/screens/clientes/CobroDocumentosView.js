@@ -12,9 +12,7 @@ import { colors, radius, spacing } from '../../theme';
 const claveDoc = (d) => `${d.codTipo}|${d.documento}`;
 
 const COLUMNS = [
-  { key: 'tipo', title: 'Tipo', width: 90 },
-  { key: 'documento', title: 'Documento', width: 110 },
-  { key: 'moneda', title: 'Moneda', width: 70 },
+  { key: 'documento', title: 'Documento', width: 200 },
   { key: 'montoAPagarLoc', title: 'Monto a pagar Loc', width: 120, align: 'right', render: (item) => <Monto value={item.montoAPagarLoc} /> },
   { key: 'montoAPagarDolar', title: 'Monto a pagar Dólar', width: 130, align: 'right', render: (item) => <Monto value={item.montoAPagarDolar} /> },
   { key: 'saldoDocLocal', title: 'Saldo doc Local', width: 120, align: 'right', render: (item) => <Monto value={item.saldoDocLocal} /> },

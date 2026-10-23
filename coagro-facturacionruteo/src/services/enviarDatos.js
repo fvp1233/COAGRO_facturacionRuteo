@@ -76,6 +76,8 @@ async function leerPendientes(db) {
         CLASE: e.CLASE,
         COD_PAIS: e.COD_PAIS,
         NUM_ITM: lineas.length,
+        // El backend lo usa en otro proceso: nunca null (pedidos guardados antes del cambio).
+        DOC_PRO: e.DOC_PRO ?? 'N',
         ESTADO: e.ESTADO,
         DESCUENTO_CASCADA: e.DESCUENTO_CASCADA,
         IMPRESO: e.IMPRESO,

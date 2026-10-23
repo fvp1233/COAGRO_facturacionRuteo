@@ -7,8 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
-import { getDatosPedido } from '../../repositories/pedidos';
-import { colors, radius, spacing } from '../../theme';
+import { getDatosPedido } from '../../repositories/pedidos';import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = '#0F766E';
 const SIN_SELECCION = 'Seleccionar';
