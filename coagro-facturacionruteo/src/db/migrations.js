@@ -116,4 +116,24 @@ export const migrations = [
       ALTER TABLE CLIENTE_CIA_V7 RENAME TO CLIENTE_CIA;
     `);
   },
+
+  // v8: nivel de precio del cliente (nombre, ej. "DETALLISTA"). Llega en /fr/sync/clientes y
+  // reemplaza el cruce LST_PRE/IND_MON contra NIVEL_LISTA, que no coincidía con el ERP.
+  async (db) => {
+    await db.execAsync('ALTER TABLE CLIENTE ADD COLUMN NIVEL_PRECIO TEXT;');
+  },
+
+  // v9: control de envío al servidor (POST /fr/sync/enviar) de lo que se registra en el equipo.
+  // ENVIADO 0 = pendiente, 1 = ya está en el servidor; ERROR_ENVIO = último error del servidor.
+  // Las coordenadas que ya había llegaron del servidor: quedan como enviadas.
+  async (db) => {
+    for (const tabla of ['VISITA', 'alFAC_ENC_PED', 'CLIENTE_UBICACION']) {
+      await db.execAsync(`
+        ALTER TABLE ${tabla} ADD COLUMN ENVIADO INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE ${tabla} ADD COLUMN FECHA_ENVIO TEXT;
+        ALTER TABLE ${tabla} ADD COLUMN ERROR_ENVIO TEXT;
+      `);
+    }
+    await db.execAsync('UPDATE CLIENTE_UBICACION SET ENVIADO = 1;');
+  },
 ];

@@ -14,9 +14,15 @@ import CobrosView from './CobrosView';
 import CobroDocumentosView from './CobroDocumentosView';
 import ConsultaDocumentosView from './ConsultaDocumentosView';
 import ConsultaClienteView from './ConsultaClienteView';
+import PedidoView from './PedidoView';
+import PedidoArticulosView from './PedidoArticulosView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
+import { getUbicacionCliente } from '../../repositories/clientes';
 import { colors } from '../../theme';
+
+// Estado de visita (EFECT_VISITA_RT) con que se registra la visita al guardar un pedido.
+const ESTADO_VISITA_EFECTIVA = '01';
 
 const TABS = [
   {
@@ -42,10 +48,12 @@ export default function ClientesScreen({ onBack }) {
   const [registro, setRegistro] = useState(null);
   // Último cliente seleccionado en la tabla ({ cliente, ruta }).
   const [seleccion, setSeleccion] = useState(null);
-  // Opción abierta desde las opciones del cliente ('cobros' | 'consultar'); null = menú de opciones.
+  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'consultar'); null = menú de opciones.
   const [opcionActiva, setOpcionActiva] = useState(null);
   // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
   const [cobro, setCobro] = useState(null);
+  // Encabezado del pedido en curso tras continuar desde Pedido; abre la tabla de artículos.
+  const [pedido, setPedido] = useState(null);
   // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'documentos'); null = menú.
   const [consulta, setConsulta] = useState(null);
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
@@ -115,8 +123,39 @@ export default function ClientesScreen({ onBack }) {
     }
   };
 
-  // Al salir de Validar se pregunta si se registra la visita.
+  // Al guardar un pedido la visita se registra sola como "Visita Efectiva" (tipo Real), con el
+  // inicio de Validar, y se vuelve al menú del cliente. Al salir de Validar ya no se pregunta.
+  const handlePedidoGuardado = async (numero) => {
+    setPedido(null);
+    setOpcionActiva(null);
+    if (validando.visitaRegistrada) return; // otro pedido en la misma visita: ya quedó registrada
+    try {
+      // Ubicación de la visita: las coordenadas del cliente (Validar > Ubicación > Asignar coordenadas).
+      const ubicacion = await getUbicacionCliente(validando.ruta, validando.cliente.codigo);
+      await registrarVisita({
+        cliente: validando.cliente.codigo,
+        ruta: validando.ruta,
+        inicio: validando.inicio,
+        fin: new Date(),
+        tipo: 'R',
+        razon: ESTADO_VISITA_EFECTIVA,
+        notas: `Pedido ${numero}`,
+        ubicacion,
+      });
+      setValidando((v) => (v ? { ...v, visitaRegistrada: true } : v));
+      setRefreshKey((k) => k + 1); // la tabla marca al cliente como visitado
+    } catch (e) {
+      Alert.alert('No se pudo registrar la visita', e?.message || 'Error al insertar en la base local.');
+    }
+  };
+
+  // Al salir de Validar se pregunta si se registra la visita (salvo que ya se registró con un pedido).
   const handleSalirValidar = () => {
+    if (validando?.visitaRegistrada) {
+      setOpcionActiva(null);
+      setValidando(null);
+      return;
+    }
     Alert.alert('Registro de visita', '¿Desea registrar la visita del cliente?', [
       {
         text: 'No',
@@ -190,6 +229,29 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  if (validando && opcionActiva === 'pedido' && pedido) {
+    return (
+      <PedidoArticulosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        encabezado={pedido}
+        onBack={() => setPedido(null)}
+        onGuardado={handlePedidoGuardado}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'pedido') {
+    return (
+      <PedidoView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onContinuar={setPedido}
+      />
+    );
+  }
+
   if (validando && opcionActiva === 'consultar' && consulta === 'cliente') {
     return (
       <ConsultaClienteView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
@@ -236,7 +298,7 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={handleSalirValidar}
         onOpcion={(opcion) => {
-          if (opcion.id === 'cobros' || opcion.id === 'consultar') setOpcionActiva(opcion.id);
+          if (['cobros', 'pedido', 'consultar'].includes(opcion.id)) setOpcionActiva(opcion.id);
           else Alert.alert(opcion.title, 'Próximamente.');
         }}
       />

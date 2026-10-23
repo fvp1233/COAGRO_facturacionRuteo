@@ -4,10 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { syncClientes } from '../services/syncClientes';
+import { syncClientesCia } from '../services/syncClientesCia';
 import { syncArticulos } from '../services/syncArticulos';
 import { syncCobros } from '../services/syncCobros';
 import { syncConsecutivos } from '../services/syncConsecutivos';
 import { refrescarSesion } from '../services/mobileAuth';
+import { contarPendientes, enviarPendientes } from '../services/enviarDatos';
 import { isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
@@ -30,15 +32,21 @@ function formatFecha(iso) {
   return d.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-// Sincronización de datos. "Cargar datos" descarga las tablas del sistema en línea a la base local
-// (clientes, artículos, documentos por cobrar y consecutivos; aquí se irán sumando más tablas). Los otros botones aún no funcionan.
+// Sincronización de datos.
+// - "Enviar Datos" sube lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
+// - "Cargar datos" primero envía lo pendiente y SOLO si todo quedó en el servidor borra las tablas
+//   locales y las vuelve a llenar con las del sistema en línea (si no, lo pendiente se perdería).
 export default function DatosScreen({ module, onBack }) {
   const insets = useSafeAreaInsets();
   const [ultima, setUltima] = useState(null);
   const [total, setTotal] = useState(0);
   const [totalArticulos, setTotalArticulos] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [pendientes, setPendientes] = useState(0);
+  // Acción en curso: 'cargar' | 'enviar' | null.
+  const [accion, setAccion] = useState(null);
   const [resumen, setResumen] = useState(null);
+  const [envio, setEnvio] = useState('');
+  const [errores, setErrores] = useState([]);
   const [error, setError] = useState('');
   const [vinculada, setVinculada] = useState(false);
 
@@ -47,6 +55,7 @@ export default function DatosScreen({ module, onBack }) {
       setUltima(await getUltimaSincronizacion());
       setTotal(await contarClientes());
       setTotalArticulos(await contarArticulos());
+      setPendientes((await contarPendientes()).total);
     } catch {
       // si la base falla, el error se mostrará al cargar datos
     }
@@ -56,46 +65,88 @@ export default function DatosScreen({ module, onBack }) {
     refrescar();
   }, [refrescar]);
 
-  const cargarDatos = async () => {
-    if (loading) return;
-    setLoading(true);
+  const limpiar = () => {
     setError('');
     setVinculada(false);
     setResumen(null);
+    setEnvio('');
+    setErrores([]);
+  };
+
+  const mostrarError = (e, sinRed) => {
+    // La renovación del token se intenta una sola vez; si la handheld ya está ligada a otro
+    // equipo, se detiene aquí y se muestra la firma de este equipo.
+    setVinculada(esErrorVinculada(e));
+    setError(isNetworkError(e) ? sinRed : e?.message || 'Ocurrió un error.');
+  };
+
+  // Envía lo pendiente. Devuelve { todo: true si todo quedó en el servidor, enviados }.
+  const enviar = async () => {
+    const { enviados, errores: fallidos } = await enviarPendientes();
+    setErrores(fallidos);
+    if (enviados) setEnvio(`Se enviaron ${enviados} ${enviados === 1 ? 'registro' : 'registros'} al servidor.`);
+    return { todo: fallidos.length === 0, enviados };
+  };
+
+  const enviarDatos = async () => {
+    if (accion) return;
+    setAccion('enviar');
+    limpiar();
+    try {
+      const { todo, enviados } = await enviar();
+      if (todo && !enviados) setEnvio('No hay datos pendientes de enviar.');
+      if (!todo) setError('Algunos registros no se enviaron. Revisa los errores e intenta de nuevo.');
+    } catch (e) {
+      mostrarError(e, 'No se pudo enviar, intenta de nuevo. Revisa tu conexión a internet.');
+    } finally {
+      await refrescar();
+      setAccion(null);
+    }
+  };
+
+  const cargarDatos = async () => {
+    if (accion) return;
+    setAccion('cargar');
+    limpiar();
     try {
       // Valida el token (renovándolo si venció) y actualiza las rutas de la handheld antes de bajar datos.
       await refrescarSesion();
+      // Primero se sube lo pendiente: la carga borra las tablas locales.
+      if (!(await enviar()).todo) {
+        setError(
+          'No se cargaron los datos: el servidor rechazó algunos registros. Corrígelos y vuelve a intentar; la carga borraría lo que está pendiente.'
+        );
+        return;
+      }
       // Cuando haya más tablas, se llaman aquí una tras otra.
       const clientes = await syncClientes();
+      const clientesCia = await syncClientesCia();
       const articulos = await syncArticulos();
       const cobros = await syncCobros();
       const consecutivos = await syncConsecutivos();
       setResumen({
         ...clientes,
+        clientesCia: clientesCia.clientesCia,
         articulos: articulos.articulos,
+        precios: articulos.precios,
         documentos: cobros.documentos,
         consecutivos: consecutivos.consecutivos,
-        omitidos: clientes.omitidos + articulos.omitidos + cobros.omitidos + consecutivos.omitidos,
+        omitidos: clientes.omitidos + clientesCia.omitidos + articulos.omitidos + cobros.omitidos + consecutivos.omitidos,
       });
     } catch (e) {
-      // La renovación del token se intenta una sola vez; si la handheld ya está ligada a otro
-      // equipo, la carga se detiene aquí y se muestra la firma de este equipo.
-      setVinculada(esErrorVinculada(e));
-      setError(
-        isNetworkError(e)
-          ? 'Debes estar conectado a internet para descargar los datos. Revisa tu conexión e intenta de nuevo.'
-          : e?.message || 'No se pudo cargar los datos.'
-      );
+      mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
     } finally {
       // Aunque falle una tabla, las que sí se guardaron se reflejan en los contadores.
       await refrescar();
-      setLoading(false);
+      setAccion(null);
     }
   };
 
   const handlePress = (action) => {
     if (action.id === 'cargar') {
       cargarDatos();
+    } else if (action.id === 'enviar') {
+      enviarDatos();
     } else {
       Alert.alert(action.title, 'Próximamente.');
     }
@@ -123,6 +174,9 @@ export default function DatosScreen({ module, onBack }) {
           <Text style={styles.line}>
             Artículos guardados: <Text style={styles.bold}>{totalArticulos}</Text>
           </Text>
+          <Text style={styles.line}>
+            Pendientes de enviar: <Text style={[styles.bold, pendientes > 0 && styles.pendiente]}>{pendientes}</Text>
+          </Text>
         </View>
 
         {ACTIONS.map((action) => (
@@ -138,7 +192,7 @@ export default function DatosScreen({ module, onBack }) {
               <Text style={styles.buttonTitle}>{action.title}</Text>
               <Text style={styles.buttonSubtitle}>{action.subtitle}</Text>
             </View>
-            {loading && action.id === 'cargar' ? (
+            {accion === action.id ? (
               <ActivityIndicator color={ACCENT} />
             ) : (
               <Feather name="chevron-right" size={20} color={colors.placeholder} />
@@ -146,10 +200,16 @@ export default function DatosScreen({ module, onBack }) {
           </Pressable>
         ))}
 
+        {envio ? (
+          <View style={[styles.message, styles.ok]}>
+            <Text style={styles.okText}>{envio}</Text>
+          </View>
+        ) : null}
+
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.documentos} documentos por cobrar, {resumen.consecutivos} consecutivos de ruta.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios,{resumen.documentos} documentos por cobrar, {resumen.consecutivos} consecutivos de ruta.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>
@@ -158,6 +218,11 @@ export default function DatosScreen({ module, onBack }) {
         {error ? (
           <View style={[styles.message, styles.fail]}>
             <Text style={styles.failText}>{error}</Text>
+            {errores.map((e, i) => (
+              <Text key={i} style={styles.failItem}>
+                • {e.tipo} {e.registro}: {e.error}
+              </Text>
+            ))}
           </View>
         ) : null}
 
@@ -240,6 +305,8 @@ const styles = StyleSheet.create({
   okText: { fontSize: 13, color: '#14532D' },
   fail: { backgroundColor: '#FEE2E2' },
   failText: { fontSize: 13, color: '#991B1B' },
+  failItem: { fontSize: 12, color: '#991B1B', marginTop: 4 },
+  pendiente: { color: '#B45309' },
   buttonSubtitle: {
     fontSize: 12,
     color: colors.textSecondary,

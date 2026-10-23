@@ -7,7 +7,7 @@ const text = (v) => (v === null || v === undefined ? null : String(v).trim());
 const textOr = (v, fallback = '') => text(v) ?? fallback;
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
-// Descarga rutas (grupo y bodegas), artículos y existencias y los guarda en SQLite en UNA transacción:
+// Descarga rutas (grupo y bodegas), artículos, existencias, precios e impuestos y los guarda en SQLite en UNA transacción:
 // o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
 export async function syncArticulos() {
   const json = await getJson(PATHS.syncArticulos);
@@ -24,9 +24,20 @@ export async function syncArticulos() {
   // Rutas de la handheld (grupo de artículos y bodegas). Si el servidor no las manda, no se tocan.
   const traeRutas = Array.isArray(data.rutas);
   const rutas = traeRutas ? conClaves(data.rutas, ['RUTA']) : [];
+  // Precios de erpadmin.ARTICULO_PRECIO (todos los niveles). Si el servidor no los manda, no se tocan.
+  // Se cruzan con el artículo por ARTICULO = COD_ART y NIVEL_PRECIO; nunca por COMPANIA.
+  const traePrecios = Array.isArray(data.precios);
+  const precios = traePrecios
+    ? conClaves(data.precios, ['ARTICULO', 'NIVEL_PRECIO', 'MONEDA', 'VERSION', 'VERSION_ARTICULO'])
+    : [];
+  // Impuestos de erpadmin.IMPUESTO (se cruzan por ARTICULO.IMPUESTO). Si no vienen, no se tocan.
+  const traeImpuestos = Array.isArray(data.impuestos);
+  const impuestos = traeImpuestos ? conClaves(data.impuestos, ['IMPUESTO']) : [];
   const omitidos =
     data.articulos.length - articulos.length + data.existencias.length - existencias.length +
-    (traeRutas ? data.rutas.length - rutas.length : 0);
+    (traeRutas ? data.rutas.length - rutas.length : 0) +
+    (traePrecios ? data.precios.length - precios.length : 0) +
+    (traeImpuestos ? data.impuestos.length - impuestos.length : 0);
 
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
@@ -104,6 +115,55 @@ export async function syncArticulos() {
       );
     }
 
+    if (traePrecios) {
+      await db.runAsync('DELETE FROM ARTICULO_PRECIO');
+      for (const p of precios) {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO ARTICULO_PRECIO
+             (ARTICULO, COMPANIA, NIVEL_PRECIO, MONEDA, PRECIO, MARGEN_UTILIDAD, VERSION, VERSION_ARTICULO,
+              FECHA_INICIO_VERSION_ARTICULO, FECHA_FINAL_VERSION_ARTICULO)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            textOr(p.ARTICULO),
+            text(p.COMPANIA),
+            textOr(p.NIVEL_PRECIO),
+            textOr(p.MONEDA),
+            num(p.PRECIO) ?? 0,
+            num(p.MARGEN_UTILIDAD) ?? 0,
+            textOr(p.VERSION),
+            textOr(p.VERSION_ARTICULO),
+            // Vacío = sin límite de vigencia (ver getArticulosPedido).
+            textOr(p.FECHA_INICIO_VERSION_ARTICULO),
+            textOr(p.FECHA_FINAL_VERSION_ARTICULO),
+          ]
+        );
+      }
+    }
+
+    if (traeImpuestos) {
+      await db.runAsync('DELETE FROM IMPUESTO');
+      for (const i of impuestos) {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO IMPUESTO
+             (COMPANIA, IMPUESTO, IMPUESTO1, IMPUESTO2, TIPO_TARIFA1, TIPO_TARIFA2, TIPO_IMPUESTO1,
+              TIPO_IMPUESTO2, USA_IMPUESTO2_CANTIDAD, IMPUESTO2_CANTIDAD)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            text(i.COMPANIA),
+            textOr(i.IMPUESTO),
+            num(i.IMPUESTO1) ?? 0,
+            num(i.IMPUESTO2) ?? 0,
+            text(i.TIPO_TARIFA1),
+            text(i.TIPO_TARIFA2),
+            text(i.TIPO_IMPUESTO1),
+            text(i.TIPO_IMPUESTO2),
+            text(i.USA_IMPUESTO2_CANTIDAD),
+            num(i.IMPUESTO2_CANTIDAD) ?? 0,
+          ]
+        );
+      }
+    }
+
     await db.runAsync(
       "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_articulos_at', ?)",
       [new Date().toISOString()]
@@ -114,6 +174,7 @@ export async function syncArticulos() {
     rutas: rutas.length,
     articulos: articulos.length,
     existencias: existencias.length,
+    precios: precios.length,
     omitidos,
   };
 }

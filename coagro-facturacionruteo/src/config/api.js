@@ -14,10 +14,15 @@ export const PATHS = {
   // PDF de un DTE generado por el backend: /fr/mobile/dte/<numero>/pdf
   dtePdf: (numero) => `/fr/mobile/dte/${encodeURIComponent(numero)}/pdf`,
   syncClientes: '/fr/sync/clientes',
+  syncClientesCia: '/fr/sync/clientesCia',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
   syncConsecutivos: '/fr/sync/consecutivos',
+  // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
+  syncEnviar: '/fr/sync/enviar',
 };
 
 // Tiempo máximo de espera por petición.
 export const TIMEOUT_MS = 15000;
+// El envío lleva todo lo pendiente en un solo request: se le da más tiempo.
+export const TIMEOUT_ENVIO_MS = 60000;

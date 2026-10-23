@@ -8,7 +8,9 @@ const ACCENT = '#15803D';
 
 // Barra de búsqueda con selector desplegable del campo por el que se busca.
 // modes: [{ key, label, icon (Feather) }]. mode = key activa.
-export default function SearchBar({ modes, mode, onModeChange, query, onQueryChange, style }) {
+// onSubmit(query): si se pasa, la búsqueda se aplica solo con Enter o con el botón de buscar
+// (y al limpiar con la X); si no, el contenedor filtra con cada cambio de onQueryChange.
+export default function SearchBar({ modes, mode, onModeChange, query, onQueryChange, onSubmit, style }) {
   const [open, setOpen] = useState(false);
   const actual = modes.find((m) => m.key === mode) ?? modes[0];
 
@@ -36,10 +38,26 @@ export default function SearchBar({ modes, mode, onModeChange, query, onQueryCha
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        onSubmitEditing={onSubmit ? () => onSubmit(query) : undefined}
       />
       {query ? (
-        <Pressable style={styles.clear} onPress={() => onQueryChange?.('')} hitSlop={8}>
+        <Pressable
+          style={styles.clear}
+          onPress={() => {
+            onQueryChange?.('');
+            onSubmit?.('');
+          }}
+          hitSlop={8}
+        >
           <Feather name="x" size={16} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
+      {onSubmit ? (
+        <Pressable
+          style={({ pressed }) => [styles.submit, pressed && styles.pressed]}
+          onPress={() => onSubmit(query)}
+        >
+          <Feather name="search" size={18} color="#FFFFFF" />
         </Pressable>
       ) : null}
 
@@ -99,6 +117,12 @@ const styles = StyleSheet.create({
   clear: {
     justifyContent: 'center',
     paddingHorizontal: spacing.sm + 2,
+  },
+  submit: {
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ACCENT,
   },
   pressed: {
     opacity: 0.7,

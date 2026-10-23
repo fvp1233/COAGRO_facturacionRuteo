@@ -55,22 +55,20 @@ export async function getClientesRuta({ ruta, dia = null, estado = 'Todos' }) {
 const NOMBRE_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 // Ficha de consulta del cliente en una ruta: CLIENTE (datos básicos), CLIENTE_CIA (datos
-// comerciales), alFAC_TIP_CLT (tipo), NIVEL_LISTA (nivel de precio), alFAC_RUTA_ORDEN (días de
-// visita) y alCXC_PEN_COB (facturas pendientes). Los datos comerciales son null si el cliente no
-// tiene fila en CLIENTE_CIA o si su tipo / nivel no está en los catálogos.
-// Nivel de precio: LST_PRE = LISTA y además IND_MON = MONEDA (LISTA la numera el backend en cada
-// sincronización; el identificador real en el ERP es NIVEL_PRECIO).
+// comerciales), alFAC_TIP_CLT (tipo), alFAC_RUTA_ORDEN (días de visita) y alCXC_PEN_COB
+// (facturas pendientes). Los datos comerciales son null si el cliente no tiene fila en
+// CLIENTE_CIA o si su tipo no está en el catálogo.
+// Nivel de precio: CLIENTE.NIVEL_PRECIO (llega en /fr/sync/clientes).
 export async function getClienteConsulta(cliente, ruta) {
   const db = await getDatabase();
   const c = await db.getFirstAsync(
     `SELECT c.COD_CLT, c.NOM_CLT, c.DIR_CLT,
-            cc.COD_CLT AS CIA_CLT, cc.NOM_CTO, cc.NUM_TEL, t.DES_TIP_CL, n.NIVEL_PRECIO, cc.DIA_CRE, cc.LIM_CRE,
+            cc.COD_CLT AS CIA_CLT, cc.NOM_CTO, cc.NUM_TEL, t.DES_TIP_CL, c.NIVEL_PRECIO, cc.DIA_CRE, cc.LIM_CRE,
             cc.POR_EXC_VT, cc.POR_EXC_CS, cc.IND_MON, cc.DESCUENTO
        FROM CLIENTE c
        LEFT JOIN CLIENTE_CIA cc ON cc.COD_CLT = c.COD_CLT
        LEFT JOIN (SELECT COD_TIP_CL, MIN(DES_TIP_CL) AS DES_TIP_CL FROM alFAC_TIP_CLT GROUP BY COD_TIP_CL) t
               ON t.COD_TIP_CL = cc.COD_TIP_CL
-       LEFT JOIN NIVEL_LISTA n ON n.LISTA = cc.LST_PRE AND n.MONEDA = cc.IND_MON
       WHERE c.COD_CLT = ? AND c.COD_ZON = ?`,
     [cliente, ruta]
   );
@@ -131,13 +129,15 @@ export async function getUbicacionCliente(ruta, cliente) {
   return { latitud: row.LATITUD, longitud: row.LONGITUD, altitud: row.ALTITUD };
 }
 
+// Coordenadas asignadas en el equipo: quedan pendientes de enviar al servidor (ENVIADO = 0).
 export async function guardarUbicacionCliente(ruta, cliente, { latitud, longitud, altitud = null }) {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO CLIENTE_UBICACION (RUTA, CLIENTE, LATITUD, LONGITUD, ALTITUD)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO CLIENTE_UBICACION (RUTA, CLIENTE, LATITUD, LONGITUD, ALTITUD, ENVIADO)
+     VALUES (?, ?, ?, ?, ?, 0)
      ON CONFLICT (RUTA, CLIENTE) DO UPDATE SET
-       LATITUD = excluded.LATITUD, LONGITUD = excluded.LONGITUD, ALTITUD = excluded.ALTITUD`,
+       LATITUD = excluded.LATITUD, LONGITUD = excluded.LONGITUD, ALTITUD = excluded.ALTITUD,
+       ENVIADO = 0, FECHA_ENVIO = NULL, ERROR_ENVIO = NULL`,
     [ruta, cliente, latitud, longitud, altitud]
   );
 }

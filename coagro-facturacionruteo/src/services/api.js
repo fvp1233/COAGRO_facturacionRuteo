@@ -53,7 +53,8 @@ function messageFromBody(body) {
 // - auth: manda el token de la app (Authorization: Bearer) si hay uno guardado.
 // - archivo: la respuesta es un archivo (p. ej. PDF): devuelve sus bytes (Uint8Array). Si el
 //   servidor responde JSON es un error ({ success:false, errors }) y se lanza como tal.
-async function send(method, path, { body, base, auth = true, archivo = false } = {}) {
+// - timeout: ms de espera (por defecto TIMEOUT_MS).
+async function send(method, path, { body, base, auth = true, archivo = false, timeout = TIMEOUT_MS } = {}) {
   const url = `${base ?? (await baseUrl())}${API_PREFIX}${path}`;
   const headers = { Accept: archivo ? '*/*' : 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -63,7 +64,7 @@ async function send(method, path, { body, base, auth = true, archivo = false } =
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeout);
 
   let response;
   try {
