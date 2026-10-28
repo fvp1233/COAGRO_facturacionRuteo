@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import SelectField from './SelectField';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 // Barra de paginación: selector de registros por página, rango mostrado y botones de navegación.
 // page empieza en 1. onPageSizeChange recibe un número.
@@ -55,7 +55,7 @@ function NavButton({ icon, disabled, onPress }) {
       hitSlop={6}
       style={({ pressed }) => [styles.nav, disabled && styles.navDisabled, pressed && styles.navPressed]}
     >
-      <Feather name={icon} size={18} color={disabled ? colors.placeholder : ACCENT} />
+      <Feather name={icon} size={18} color={disabled ? colors.textDisabled : ACCENT} />
     </Pressable>
   );
 }
@@ -81,33 +81,33 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   select: {
     width: 72,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
     borderRadius: radius.sm + 2,
     overflow: 'hidden',
   },
   range: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   nav: {
     width: 38,
     height: 38,
     borderRadius: radius.pill,
-    backgroundColor: '#ECFDF3',
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   navDisabled: {
-    backgroundColor: '#F1F5F9',
-    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   navPressed: {
     opacity: 0.7,
@@ -116,10 +116,10 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   pageBold: {
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
 });

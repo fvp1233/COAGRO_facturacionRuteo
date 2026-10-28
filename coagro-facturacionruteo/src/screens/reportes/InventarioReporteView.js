@@ -89,7 +89,7 @@ export default function InventarioReporteView({ onBack }) {
             onChange={setIncluirSinExistencia}
           />
           <View style={styles.countChip}>
-            <Feather name="package" size={12} color="#475569" />
+            <Feather name="package" size={12} color={colors.textMuted} />
             <Text style={styles.countText}>{filtrados.length} artículos</Text>
           </View>
         </View>
@@ -116,7 +116,7 @@ export default function InventarioReporteView({ onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F4F5FA',
+    backgroundColor: colors.surface,
   },
   content: {
     padding: spacing.md,
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#E2E9F7',
+    backgroundColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
@@ -139,16 +139,16 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: colors.textMuted,
   },
   rutaInfo: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   warning: {
     fontSize: 13,
-    color: '#92400E',
-    backgroundColor: '#FEF3C7',
+    color: colors.error,
+    backgroundColor: colors.errorSoft,
     borderRadius: radius.md,
     padding: spacing.md,
   },

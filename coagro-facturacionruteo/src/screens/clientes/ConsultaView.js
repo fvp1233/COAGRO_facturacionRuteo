@@ -7,7 +7,7 @@ import { CONSULTAS } from '../../constants/consultas';
 import { colors, radius, spacing } from '../../theme';
 
 const COLUMNS = 3;
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 export default function ConsultaView({ onBack, onOpenConsulta }) {
   const rows = [];
@@ -48,7 +48,7 @@ export default function ConsultaView({ onBack, onOpenConsulta }) {
 
         <View style={styles.status}>
           <View style={styles.statusIcon}>
-            <MaterialCommunityIcons name="cloud-check" size={16} color="#FFFFFF" />
+            <MaterialCommunityIcons name="cloud-check" size={16} color={colors.onPrimary} />
           </View>
           <View style={styles.statusTexts}>
             <Text style={styles.statusTitle}>Base Local Actualizada</Text>
@@ -87,15 +87,15 @@ const styles = StyleSheet.create({
   metaTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: colors.textLabel,
+    color: colors.text,
   },
   routeChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#ECFDF3',
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.primarySoft,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 3,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     gap: spacing.sm + 4,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -148,15 +148,15 @@ const styles = StyleSheet.create({
   statusTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   statusSubtitle: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 1,
   },
   version: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -164,6 +164,6 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#475569',
+    color: colors.textMuted,
   },
 });

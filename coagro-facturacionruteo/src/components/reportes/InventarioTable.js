@@ -52,7 +52,7 @@ export default function InventarioTable({ articulos, primeraColumna = 'codigo', 
 const styles = StyleSheet.create({
   code: {
     alignSelf: 'flex-start',
-    backgroundColor: '#EEF1F7',
+    backgroundColor: colors.border,
     borderRadius: radius.sm - 2,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -60,17 +60,17 @@ const styles = StyleSheet.create({
   codeText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.textLabel,
+    color: colors.text,
   },
   qty: {
     textAlign: 'right',
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     fontVariant: ['tabular-nums'],
   },
   qtyZero: {
     fontWeight: '400',
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

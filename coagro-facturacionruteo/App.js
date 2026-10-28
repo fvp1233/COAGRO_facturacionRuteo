@@ -59,8 +59,8 @@ export default function App() {
     switch (screen) {
       case 'loading':
         return (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.headerBg }}>
-            <ActivityIndicator color="#FFFFFF" />
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary }}>
+            <ActivityIndicator color={colors.onPrimary} />
           </View>
         );
       case 'connection':

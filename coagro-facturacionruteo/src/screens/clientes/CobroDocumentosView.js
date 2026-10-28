@@ -111,17 +111,17 @@ function Field({ label, value, total }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   infoCard: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
   },
-  clientName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  clientMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  error: { fontSize: 12, color: '#991B1B' },
-  cellText: { fontSize: 14, lineHeight: 19, color: colors.textPrimary },
+  clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  error: { fontSize: 12, color: colors.error },
+  cellText: { fontSize: 14, lineHeight: 19, color: colors.text },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
@@ -130,15 +130,15 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.sm },
   field: { flex: 1 },
-  label: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
   readonly: {
     minHeight: 42,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F3F5F9',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm + 2,
     justifyContent: 'center',
   },
-  readonlyTotal: { backgroundColor: '#DCF5E3' },
-  value: { fontSize: 14, color: colors.textPrimary },
-  valueTotal: { fontSize: 16, fontWeight: '700', color: '#15803D' },
+  readonlyTotal: { backgroundColor: colors.primarySoft },
+  value: { fontSize: 14, color: colors.text },
+  valueTotal: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
 });

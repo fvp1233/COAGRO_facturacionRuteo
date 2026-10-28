@@ -1,3 +1,5 @@
+import { colors } from '../theme';
+
 // Módulos del menú principal. Los badges son datos de ejemplo hasta conectar el backend.
 export const MODULES = [
   {
@@ -7,12 +9,12 @@ export const MODULES = [
     icon: { family: 'Feather', name: 'users' },
     badge: { label: '42' },
     palette: {
-      accent: '#10B981',
-      gradient: ['#1FA97A', '#0B7A55'],
-      tint: '#ECFDF5',
-      border: '#BDEBD8',
-      badgeBg: '#D1FAE5',
-      badgeText: '#047857',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
+      badgeBg: colors.primarySoft,
+      badgeText: colors.primaryDark,
     },
   },
   {
@@ -22,12 +24,12 @@ export const MODULES = [
     icon: { family: 'MaterialCommunityIcons', name: 'warehouse' },
     badge: { label: 'Activo', dot: true },
     palette: {
-      accent: '#F59E0B',
-      gradient: ['#FB9A1B', '#EA6A0A'],
-      tint: '#FFF7ED',
-      border: '#FDE2BF',
-      badgeBg: '#FEF3C7',
-      badgeText: '#B45309',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
+      badgeBg: colors.primarySoft,
+      badgeText: colors.primaryDark,
     },
   },
   {
@@ -37,12 +39,12 @@ export const MODULES = [
     icon: { family: 'Feather', name: 'trending-up' },
     badge: { label: '$4,850' },
     palette: {
-      accent: '#10B981',
-      gradient: ['#1FB083', '#0C8A5F'],
-      tint: '#F0FDF7',
-      border: '#BFEBDB',
-      badgeBg: '#D1FAE5',
-      badgeText: '#047857',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
+      badgeBg: colors.primarySoft,
+      badgeText: colors.primaryDark,
     },
   },
   {
@@ -52,12 +54,12 @@ export const MODULES = [
     icon: { family: 'Feather', name: 'database' },
     badge: { icon: 'refresh-cw' },
     palette: {
-      accent: '#0EA5E9',
-      gradient: ['#2E9BF0', '#1D6FE0'],
-      tint: '#F0F7FF',
-      border: '#C7E0F7',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
       badgeBg: 'transparent',
-      badgeText: '#0284C7',
+      badgeText: colors.primaryDark,
     },
   },
   {
@@ -67,12 +69,12 @@ export const MODULES = [
     icon: { family: 'Feather', name: 'sliders' },
     badge: { label: 'Config' },
     palette: {
-      accent: '#6366F1',
-      gradient: ['#3F4A8C', '#5B4FE0'],
-      tint: '#F3F3FF',
-      border: '#D4D6F5',
-      badgeBg: '#E0E7FF',
-      badgeText: '#4338CA',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
+      badgeBg: colors.primarySoft,
+      badgeText: colors.primaryDark,
     },
   },
   {
@@ -82,12 +84,12 @@ export const MODULES = [
     icon: { family: 'MaterialCommunityIcons', name: 'calendar-month-outline' },
     badge: { label: '5 hoy' },
     palette: {
-      accent: '#F43F5E',
-      gradient: ['#F0424F', '#D61F38'],
-      tint: '#FFF1F2',
-      border: '#FBD0D6',
-      badgeBg: '#FFE4E6',
-      badgeText: '#BE123C',
+      accent: colors.primary,
+      gradient: [colors.primary, colors.primaryPressed],
+      tint: colors.surface,
+      border: colors.border,
+      badgeBg: colors.primarySoft,
+      badgeText: colors.primaryDark,
     },
   },
 ];

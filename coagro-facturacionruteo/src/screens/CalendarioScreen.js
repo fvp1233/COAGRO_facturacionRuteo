@@ -9,9 +9,9 @@ import { getVencimientos } from '../repositories/cobros';
 import { formatMonto } from '../utils/formato';
 import { colors, radius, spacing } from '../theme';
 
-const ACCENT = '#E11D48';
-const VENCIDO = '#DC2626';
-const POR_VENCER = '#F59E0B';
+const ACCENT = colors.primary;
+const VENCIDO = colors.error;
+const POR_VENCER = colors.warning;
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -121,11 +121,11 @@ export default function CalendarioScreen({ onBack }) {
         <View style={styles.card}>
           <View style={styles.monthBar}>
             <Pressable onPress={() => moverMes(-1)} hitSlop={10} style={styles.monthButton}>
-              <Feather name="chevron-left" size={22} color={colors.textPrimary} />
+              <Feather name="chevron-left" size={22} color={colors.text} />
             </Pressable>
             <Text style={styles.monthTitle}>{MESES[mes.mes]} {mes.anio}</Text>
             <Pressable onPress={() => moverMes(1)} hitSlop={10} style={styles.monthButton}>
-              <Feather name="chevron-right" size={22} color={colors.textPrimary} />
+              <Feather name="chevron-right" size={22} color={colors.text} />
             </Pressable>
           </View>
 
@@ -214,7 +214,7 @@ export default function CalendarioScreen({ onBack }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   summaryCard: {
     flexDirection: 'row',
@@ -228,13 +228,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#FFE4E6',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   summaryTexts: { flex: 1 },
-  summaryTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  summaryMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  summaryTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  summaryMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
@@ -247,14 +247,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   monthButton: { padding: spacing.xs },
-  monthTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
+  monthTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   week: { flexDirection: 'row' },
   weekDay: {
     width: `${100 / 7}%`,
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: colors.textMuted,
     paddingVertical: spacing.xs,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
@@ -272,9 +272,9 @@ const styles = StyleSheet.create({
   },
   dayToday: { borderWidth: 1.5, borderColor: ACCENT },
   daySelected: { backgroundColor: ACCENT, borderColor: ACCENT },
-  dayText: { fontSize: 14, color: colors.textPrimary },
+  dayText: { fontSize: 14, color: colors.text },
   dayTextToday: { color: ACCENT, fontWeight: '700' },
-  dayTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  dayTextSelected: { color: colors.onPrimary, fontWeight: '700' },
   dot: { width: 6, height: 6, borderRadius: radius.pill, marginTop: 2 },
   legend: {
     flexDirection: 'row',
@@ -283,35 +283,35 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: radius.pill },
-  legendText: { fontSize: 12, color: colors.textSecondary },
+  legendText: { fontSize: 12, color: colors.textMuted },
   todayButton: {
     marginLeft: 'auto',
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.xs,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
   },
   todayText: { fontSize: 13, fontWeight: '600', color: ACCENT },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dayHeaderTexts: { flex: 1 },
-  dayTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, textTransform: 'capitalize' },
-  dayMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  dayTitle: { fontSize: 15, fontWeight: '700', color: colors.text, textTransform: 'capitalize' },
+  dayMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   totalChip: {
     alignItems: 'flex-end',
-    backgroundColor: '#FFE4E6',
+    backgroundColor: colors.primarySoft,
     borderRadius: radius.sm + 2,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
   },
-  totalLabel: { fontSize: 11, color: '#9F1239' },
-  totalValue: { fontSize: 16, fontWeight: '700', color: '#BE123C' },
-  error: { fontSize: 12, color: '#991B1B' },
-  empty: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.md },
+  totalLabel: { fontSize: 11, color: colors.primaryDark },
+  totalValue: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
+  error: { fontSize: 12, color: colors.error },
+  empty: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   itemBar: { width: 4, alignSelf: 'stretch' },
   itemTexts: { flex: 1, gap: 2 },
-  itemName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
-  itemMeta: { fontSize: 12, color: colors.textSecondary },
-  itemAmount: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  itemName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  itemMeta: { fontSize: 12, color: colors.textMuted },
+  itemAmount: { fontSize: 15, fontWeight: '700', color: colors.text },
 });

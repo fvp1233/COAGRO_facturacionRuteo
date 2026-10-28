@@ -12,11 +12,11 @@ export default function TextField({ label, icon, secure = false, error, style, .
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.field, focused && styles.fieldFocused, error && styles.fieldError]}>
         {icon ? (
-          <MaterialCommunityIcons name={icon} size={22} color={colors.inputIcon} style={styles.icon} />
+          <MaterialCommunityIcons name={icon} size={22} color={colors.textMuted} style={styles.icon} />
         ) : null}
         <TextInput
           style={styles.input}
-          placeholderTextColor={colors.placeholder}
+          placeholderTextColor={colors.textDisabled}
           secureTextEntry={hidden}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -27,7 +27,7 @@ export default function TextField({ label, icon, secure = false, error, style, .
             <Ionicons
               name={hidden ? 'eye-outline' : 'eye-off-outline'}
               size={22}
-              color={colors.textSecondary}
+              color={colors.textMuted}
             />
           </Pressable>
         ) : null}
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.textLabel,
+    color: colors.text,
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
@@ -53,23 +53,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 50,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.inputBg,
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: colors.inputBorder,
+    borderColor: colors.border,
     borderRadius: radius.md,
   },
   fieldFocused: {
-    borderColor: colors.inputBorderFocus,
+    borderColor: colors.primary,
     backgroundColor: colors.background,
   },
   fieldError: {
-    borderColor: '#DC2626',
+    borderColor: colors.error,
+    backgroundColor: colors.errorSoft,
   },
   error: {
     marginTop: spacing.xs,
     marginLeft: spacing.xs,
     fontSize: 12,
-    color: '#DC2626',
+    color: colors.error,
   },
   icon: {
     marginRight: spacing.md,
@@ -78,6 +79,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
 });

@@ -10,7 +10,7 @@ import SelectField from '../../components/ui/SelectField';
 import { getEfectividades } from '../../repositories/visitas';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 const TIPOS_VISITA = ['Real', 'Telefónica'];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -113,7 +113,7 @@ export default function VisitaRegistroView({ cliente, ruta, inicio, fin, onBack,
             multiline
             textAlignVertical="top"
             placeholder="Escribe una descripción o nota de la visita..."
-            placeholderTextColor={colors.placeholder}
+            placeholderTextColor={colors.textDisabled}
             value={notas}
             onChangeText={setNotas}
             autoFocus
@@ -204,14 +204,14 @@ function ActionButton({ icon, label, onPress, primary }) {
       onPress={onPress}
       style={({ pressed }) => [styles.action, primary && styles.actionPrimary, pressed && styles.pressed]}
     >
-      <Feather name={icon} size={22} color={primary ? '#FFFFFF' : ACCENT} />
+      <Feather name={icon} size={22} color={primary ? colors.onPrimary : ACCENT} />
       <Text style={[styles.actionText, primary && styles.actionTextPrimary]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   card: {
     backgroundColor: colors.background,
@@ -221,26 +221,26 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.sm },
   half: { flex: 1 },
-  label: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
   readonly: {
     minHeight: 42,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F3F5F9',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm + 2,
     justifyContent: 'center',
     paddingVertical: spacing.sm,
   },
-  value: { fontSize: 14, color: colors.textPrimary },
+  value: { fontSize: 14, color: colors.text },
   locHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
-  error: { fontSize: 12, color: '#991B1B' },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  error: { fontSize: 12, color: colors.error },
   bar: {
     flexDirection: 'row',
     gap: spacing.md,
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   action: {
     flex: 1,
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   },
   actionPrimary: { backgroundColor: ACCENT },
   actionText: { fontSize: 15, fontWeight: '700', color: ACCENT },
-  actionTextPrimary: { color: '#FFFFFF' },
+  actionTextPrimary: { color: colors.onPrimary },
   pressed: { opacity: 0.8 },
   notesBody: { flex: 1, padding: spacing.md },
   notesInput: {
@@ -264,6 +264,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
 });

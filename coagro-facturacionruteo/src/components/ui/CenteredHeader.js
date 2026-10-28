@@ -6,7 +6,7 @@ export default function CenteredHeader({ title, subtitle = 'COAGRO FACTURACIÓN'
   return (
     <View style={styles.container}>
       <Pressable onPress={onBack} hitSlop={10} style={styles.side}>
-        <Feather name="chevron-left" size={28} color={colors.textPrimary} />
+        <Feather name="chevron-left" size={28} color={colors.text} />
       </Pressable>
 
       <View style={styles.titles}>
@@ -18,7 +18,7 @@ export default function CenteredHeader({ title, subtitle = 'COAGRO FACTURACIÓN'
       </View>
 
       <Pressable onPress={onInfo} hitSlop={10} style={[styles.side, styles.sideRight]}>
-        <Feather name="info" size={22} color={colors.textPrimary} />
+        <Feather name="info" size={22} color={colors.text} />
       </Pressable>
     </View>
   );
@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
+    borderBottomColor: colors.border,
   },
   side: {
     width: 44,
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   subtitleRow: {
     flexDirection: 'row',
@@ -66,6 +66,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

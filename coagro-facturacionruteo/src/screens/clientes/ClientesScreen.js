@@ -332,7 +332,7 @@ export default function ClientesScreen({ onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F4F5FA',
+    backgroundColor: colors.surface,
   },
   placeholder: {
     flex: 1,
@@ -344,6 +344,6 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

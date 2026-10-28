@@ -9,7 +9,7 @@ import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
 import { getDatosPedido } from '../../repositories/pedidos';import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#0F766E';
+const ACCENT = colors.primary;
 const SIN_SELECCION = 'Seleccionar';
 const TIPOS_DOCUMENTO = ['Normal', 'Crédito fiscal'];
 
@@ -257,7 +257,7 @@ export default function PedidoView({ cliente, ruta, onBack, onContinuar }) {
           disabled={!opciones}
           style={({ pressed }) => [styles.action, (pressed || !opciones) && styles.pressed]}
         >
-          <Feather name="check" size={22} color="#FFFFFF" />
+          <Feather name="check" size={22} color={colors.onPrimary} />
           <Text style={styles.actionText}>Continuar</Text>
         </Pressable>
       </View>
@@ -266,7 +266,7 @@ export default function PedidoView({ cliente, ruta, onBack, onContinuar }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   clientCard: {
     flexDirection: 'row',
@@ -280,25 +280,25 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#CCFBF1',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   clientTexts: { flex: 1 },
-  clientName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  clientMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   loading: { marginTop: spacing.lg },
-  warning: { fontSize: 13, color: '#B45309' },
+  warning: { fontSize: 13, color: colors.warning },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm + 4,
   },
-  label: { fontSize: 12, color: colors.textSecondary },
+  label: { fontSize: 12, color: colors.textMuted },
   segment: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
     borderRadius: radius.sm + 2,
     padding: 3,
   },
@@ -310,13 +310,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentActive: { backgroundColor: ACCENT },
-  segmentText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  segmentTextActive: { color: '#FFFFFF' },
+  segmentText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  segmentTextActive: { color: colors.onPrimary },
   bar: {
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   action: {
     height: 48,
@@ -327,6 +327,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  actionText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  actionText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
   pressed: { opacity: 0.8 },
 });

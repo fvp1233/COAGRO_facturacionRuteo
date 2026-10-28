@@ -8,7 +8,7 @@ import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 const MONEDAS = ['Local', 'Dólar'];
 const TIPOS_PAGO = ['Recibo', 'Monto total', 'Selección de facturas'];
 
@@ -48,7 +48,7 @@ export default function CobrosView({ cliente, ruta, onBack, onContinuar }) {
           onPress={() => onContinuar?.({ moneda, tipoPago })}
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
-          <Feather name="check" size={22} color="#FFFFFF" />
+          <Feather name="check" size={22} color={colors.onPrimary} />
           <Text style={styles.actionText}>Continuar</Text>
         </Pressable>
       </View>
@@ -57,7 +57,7 @@ export default function CobrosView({ cliente, ruta, onBack, onContinuar }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   clientCard: {
     flexDirection: 'row',
@@ -71,13 +71,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   clientTexts: { flex: 1 },
-  clientName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  clientMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   action: {
     height: 48,
@@ -99,6 +99,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  actionText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  actionText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
   pressed: { opacity: 0.8 },
 });

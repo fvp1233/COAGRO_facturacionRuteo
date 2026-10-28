@@ -7,11 +7,11 @@ export default function PrimaryButton({ title, icon, onPress, loading = false, s
     <Pressable
       onPress={loading ? undefined : onPress}
       disabled={loading}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed, style]}
+      style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled, style]}
     >
       <Text style={styles.text}>{title}</Text>
-      {loading ? <ActivityIndicator color="#FFFFFF" style={styles.icon} /> : null}
-      {!loading && icon ? <Ionicons name={icon} size={22} color="#FFFFFF" style={styles.icon} /> : null}
+      {loading ? <ActivityIndicator color={colors.onPrimary} style={styles.icon} /> : null}
+      {!loading && icon ? <Ionicons name={icon} size={22} color={colors.onPrimary} style={styles.icon} /> : null}
     </Pressable>
   );
 }
@@ -31,11 +31,16 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   pressed: {
-    opacity: 0.85,
+    backgroundColor: colors.primaryPressed,
     transform: [{ scale: 0.99 }],
   },
+  disabled: {
+    backgroundColor: colors.textDisabled,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   text: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
     fontSize: 16,
     fontWeight: '700',
   },

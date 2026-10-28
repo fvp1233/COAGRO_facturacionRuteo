@@ -21,7 +21,7 @@ export default function UbicacionMenu({ visible, onClose, onSelect }) {
               style={({ pressed }) => [styles.option, pressed && styles.pressed]}
             >
               <View style={styles.iconWrap}>
-                <Feather name={op.icon} size={18} color="#15803D" />
+                <Feather name={op.icon} size={18} color={colors.primary} />
               </View>
               <Text style={styles.optionText}>{op.label}</Text>
             </Pressable>
@@ -40,14 +40,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
   },
   title: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -63,12 +63,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.pill,
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   optionText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
 });

@@ -20,7 +20,7 @@ const COLUMNS = [
   { key: 'monto', title: 'Monto', width: 100, align: 'right' },
 ];
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 const claveFila = (item) => `${item.codTipo}|${item.documento}`;
 
 // Saldo y monto en la moneda del documento (IND_MON = 'D' → dólar; si no, local).
@@ -115,9 +115,9 @@ export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
             {generando ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
-              <Feather name="printer" size={20} color="#FFFFFF" />
+              <Feather name="printer" size={20} color={colors.onPrimary} />
             )}
             <Text style={styles.actionText}>Imprimir</Text>
           </Pressable>
@@ -128,16 +128,16 @@ export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   infoCard: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
   },
-  clientName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
-  clientMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  error: { fontSize: 12, color: '#991B1B' },
+  clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  error: { fontSize: 12, color: colors.error },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -145,9 +145,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
-  barText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  barText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
   action: {
     height: 48,
     paddingHorizontal: spacing.lg,
@@ -158,6 +158,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  actionText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  actionText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
   pressed: { opacity: 0.8 },
 });

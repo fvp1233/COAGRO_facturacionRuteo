@@ -8,7 +8,7 @@ import OptionTile from '../../components/consulta/OptionTile';
 import { OPCIONES_CLIENTE } from '../../constants/opcionesCliente';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 // Página que se abre al validar un cliente: muestra las operaciones disponibles para él.
 // También sirve para submenús del cliente (p. ej. Menú Consultar) pasando title/opciones/columns.
@@ -77,7 +77,7 @@ export default function ClienteOpcionesView({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F4F5FA',
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -104,11 +104,11 @@ const styles = StyleSheet.create({
   clientName: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   clientMeta: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
   grid: {

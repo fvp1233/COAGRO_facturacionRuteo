@@ -14,7 +14,7 @@ import { getRutaActiva } from '../../repositories/rutaActiva';
 import { colors, radius, spacing } from '../../theme';
 import { normalizar } from '../../utils/text';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 const SEARCH_MODES = {
   codigo: { label: 'Código', icon: 'hash', placeholder: 'Buscar por código...', field: 'codigo' },
@@ -197,12 +197,12 @@ export default function ValidarView({
           >
             <Feather name={mode.icon} size={16} color={ACCENT} />
             <Text style={styles.searchModeText}>{mode.label}</Text>
-            <Feather name="chevron-down" size={14} color={colors.textPrimary} />
+            <Feather name="chevron-down" size={14} color={colors.text} />
           </Pressable>
           <TextInput
             style={styles.searchInput}
             placeholder={mode.placeholder}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={colors.textMuted}
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
@@ -211,7 +211,7 @@ export default function ValidarView({
           />
           {query ? (
             <Pressable style={styles.clear} onPress={() => setQuery('')} hitSlop={8}>
-              <Feather name="x" size={16} color={colors.textSecondary} />
+              <Feather name="x" size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
         </View>
@@ -231,7 +231,7 @@ export default function ValidarView({
         <View style={styles.optionsRow}>
           <Checkbox label="Ordenar alfabéticamente" checked={ordenAlfabetico} onChange={setOrdenAlfabetico} />
           <View style={styles.countChip}>
-            <Feather name="users" size={12} color="#475569" />
+            <Feather name="users" size={12} color={colors.textMuted} />
             <Text style={styles.countText}>{clientes.length} clientes encontrados</Text>
           </View>
         </View>
@@ -266,7 +266,7 @@ export default function ValidarView({
               hitSlop={8}
               style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
             >
-              <MaterialCommunityIcons name="google-maps" size={24} color="#FFFFFF" />
+              <MaterialCommunityIcons name="google-maps" size={24} color={colors.onPrimary} />
             </Pressable>
           </View>
         ) : null}
@@ -283,8 +283,8 @@ const styles = StyleSheet.create({
   },
   warning: {
     fontSize: 13,
-    color: '#92400E',
-    backgroundColor: '#FEF3C7',
+    color: colors.error,
+    backgroundColor: colors.errorSoft,
     borderRadius: radius.md,
     padding: spacing.md,
   },
@@ -306,18 +306,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: spacing.sm + 4,
-    backgroundColor: '#EEF1FA',
+    backgroundColor: colors.surface,
   },
   searchModeText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   searchInput: {
     flex: 1,
     paddingHorizontal: spacing.sm + 2,
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   clear: {
     justifyContent: 'center',
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#E2E9F7',
+    backgroundColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: colors.textMuted,
   },
   address: {
     flexDirection: 'row',
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -382,12 +382,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   addressText: {
     fontSize: 15,
     lineHeight: 21,
-    color: colors.textPrimary,
+    color: colors.text,
   },
 });

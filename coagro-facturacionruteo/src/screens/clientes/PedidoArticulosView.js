@@ -17,7 +17,7 @@ import { formatCantidad, formatMonto, formatPorcentaje } from '../../utils/forma
 import { normalizar } from '../../utils/text';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#0F766E';
+const ACCENT = colors.primary;
 
 const SEARCH_MODES = [
   { key: 'familia', label: 'Familia', icon: 'layers' },
@@ -105,7 +105,7 @@ function Campo({ label, value, onChange, onBlur, entero = false, disabled = fals
         editable={!disabled}
         keyboardType={entero ? 'number-pad' : 'decimal-pad'}
         placeholder="0"
-        placeholderTextColor={colors.placeholder}
+        placeholderTextColor={colors.textDisabled}
       />
     </View>
   );
@@ -308,7 +308,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
             {encabezado?.nivelPrecio ? ` · ${encabezado.nivelPrecio}` : ''}
           </Text>
           <View style={styles.countChip}>
-            <Feather name="shopping-cart" size={12} color="#475569" />
+            <Feather name="shopping-cart" size={12} color={colors.textMuted} />
             <Text style={styles.countText}>{agregados.length}</Text>
           </View>
         </View>
@@ -410,13 +410,13 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
           <Text style={styles.barTotalValue}>{monto(totalPedido, monedaPedido)}</Text>
         </View>
         <Pressable onPress={agregar} style={({ pressed }) => [styles.barButton, styles.barPrimary, pressed && styles.pressed]}>
-          <Feather name="plus" size={22} color="#FFFFFF" />
+          <Feather name="plus" size={22} color={colors.onPrimary} />
         </Pressable>
         <Pressable
           onPress={siguiente}
           style={({ pressed }) => [styles.barButton, styles.barPrimary, (pressed || !agregados.length) && styles.pressed]}
         >
-          <Feather name="arrow-right" size={22} color="#FFFFFF" />
+          <Feather name="arrow-right" size={22} color={colors.onPrimary} />
         </Pressable>
       </View>
 
@@ -442,65 +442,65 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  info: { flex: 1, fontSize: 12, color: colors.textSecondary },
+  info: { flex: 1, fontSize: 12, color: colors.textMuted },
   countChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#E2E9F7',
+    backgroundColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
   },
-  countText: { fontSize: 12, fontWeight: '600', color: '#334155' },
+  countText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   warning: {
     fontSize: 13,
-    color: '#92400E',
-    backgroundColor: '#FEF3C7',
+    color: colors.error,
+    backgroundColor: colors.errorSoft,
     borderRadius: radius.md,
     padding: spacing.md,
   },
   loading: { marginTop: spacing.lg },
-  num: { textAlign: 'right', fontSize: 14, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  num: { textAlign: 'right', fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm + 4,
   },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm + 4 },
   field: { width: '48%', gap: 4 },
-  label: { fontSize: 12, color: colors.textSecondary },
+  label: { fontSize: 12, color: colors.textMuted },
   input: {
     height: 42,
     paddingHorizontal: spacing.sm + 4,
     borderRadius: radius.sm + 2,
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
     textAlign: 'right',
   },
-  inputDisabled: { backgroundColor: '#F1F5F9', color: colors.textSecondary },
+  inputDisabled: { backgroundColor: colors.surface, color: colors.textMuted },
   readOnly: {
     height: 42,
     lineHeight: 42,
     paddingHorizontal: spacing.sm + 4,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
-  alerta: { color: '#DC2626' },
-  empty: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.md },
+  alerta: { color: colors.error },
+  empty: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   barButton: {
     width: 48,
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  barSecondary: { backgroundColor: '#CCFBF1' },
+  barSecondary: { backgroundColor: colors.primarySoft },
   barPrimary: { backgroundColor: ACCENT },
   badge: {
     position: 'absolute',
@@ -527,13 +527,13 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  badgeText: { fontSize: 11, fontWeight: '700', color: colors.onPrimary },
   barTotal: { flex: 1, alignItems: 'center' },
-  barTotalLabel: { fontSize: 12, color: colors.textSecondary },
-  barTotalValue: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  barTotalLabel: { fontSize: 12, color: colors.textMuted },
+  barTotalValue: { fontSize: 18, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
   pressed: { opacity: 0.8 },
 });

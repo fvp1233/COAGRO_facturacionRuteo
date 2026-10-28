@@ -11,7 +11,7 @@ import { REPORTES } from '../constants/reportes';
 import { colors, radius, spacing } from '../theme';
 
 const COLUMNS = 2;
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 function formatHoy() {
   return new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -82,7 +82,7 @@ export default function ReportesScreen({ onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F4F5FA',
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -109,11 +109,11 @@ const styles = StyleSheet.create({
   dayTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   dayMeta: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
     textTransform: 'capitalize',
   },

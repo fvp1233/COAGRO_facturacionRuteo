@@ -4,7 +4,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#15803D';
+const ACCENT = colors.primary;
 
 // Barra de búsqueda con selector desplegable del campo por el que se busca.
 // modes: [{ key, label, icon (Feather) }]. mode = key activa.
@@ -27,12 +27,12 @@ export default function SearchBar({ modes, mode, onModeChange, query, onQueryCha
       >
         <Feather name={actual.icon} size={16} color={ACCENT} />
         <Text style={styles.modeText} numberOfLines={1}>{actual.label}</Text>
-        <Feather name="chevron-down" size={14} color={colors.textPrimary} />
+        <Feather name="chevron-down" size={14} color={colors.text} />
       </Pressable>
       <TextInput
         style={styles.input}
         placeholder={`Buscar por ${actual.label.toLowerCase()}...`}
-        placeholderTextColor={colors.textSecondary}
+        placeholderTextColor={colors.textDisabled}
         value={query}
         onChangeText={onQueryChange}
         autoCapitalize="none"
@@ -49,7 +49,7 @@ export default function SearchBar({ modes, mode, onModeChange, query, onQueryCha
           }}
           hitSlop={8}
         >
-          <Feather name="x" size={16} color={colors.textSecondary} />
+          <Feather name="x" size={16} color={colors.textMuted} />
         </Pressable>
       ) : null}
       {onSubmit ? (
@@ -57,7 +57,7 @@ export default function SearchBar({ modes, mode, onModeChange, query, onQueryCha
           style={({ pressed }) => [styles.submit, pressed && styles.pressed]}
           onPress={() => onSubmit(query)}
         >
-          <Feather name="search" size={18} color="#FFFFFF" />
+          <Feather name="search" size={18} color={colors.onPrimary} />
         </Pressable>
       ) : null}
 
@@ -73,7 +73,7 @@ export default function SearchBar({ modes, mode, onModeChange, query, onQueryCha
                   onPress={() => elegir(m.key)}
                   style={({ pressed }) => [styles.option, pressed && styles.pressed]}
                 >
-                  <Feather name={m.icon} size={16} color={selected ? ACCENT : colors.textSecondary} />
+                  <Feather name={m.icon} size={16} color={selected ? ACCENT : colors.textMuted} />
                   <Text style={[styles.optionText, selected && styles.optionSelected]}>{m.label}</Text>
                   {selected ? <Ionicons name="checkmark" size={18} color={ACCENT} /> : null}
                 </Pressable>
@@ -99,20 +99,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: spacing.sm + 4,
-    backgroundColor: '#EEF1FA',
+    backgroundColor: colors.surface,
     maxWidth: 150,
   },
   modeText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     flexShrink: 1,
   },
   input: {
     flex: 1,
     paddingHorizontal: spacing.sm + 2,
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   clear: {
     justifyContent: 'center',
@@ -134,14 +134,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
   },
   sheetTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   optionText: {
     flex: 1,
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   optionSelected: {
     fontWeight: '700',

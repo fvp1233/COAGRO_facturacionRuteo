@@ -17,7 +17,7 @@ import { contarClientes, getUltimaSincronizacion } from '../repositories/cliente
 import { contarArticulos } from '../repositories/articulos';
 import { colors, radius, spacing } from '../theme';
 
-const ACCENT = '#0EA5E9';
+const ACCENT = colors.primary;
 
 const ACTIONS = [
   { id: 'cargar', title: 'Cargar datos', subtitle: 'Descargar datos desde el servidor', icon: 'download-cloud' },
@@ -158,7 +158,7 @@ export default function DatosScreen({ module, onBack }) {
 
       <View style={styles.header}>
         <Pressable onPress={onBack} hitSlop={8} style={styles.back}>
-          <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>{module?.title ?? 'Datos'}</Text>
       </View>
@@ -186,7 +186,7 @@ export default function DatosScreen({ module, onBack }) {
             style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           >
             <View style={styles.iconWrap}>
-              <Feather name={action.icon} size={24} color="#FFFFFF" />
+              <Feather name={action.icon} size={24} color={colors.onPrimary} />
             </View>
             <View style={styles.texts}>
               <Text style={styles.buttonTitle}>{action.title}</Text>
@@ -195,7 +195,7 @@ export default function DatosScreen({ module, onBack }) {
             {accion === action.id ? (
               <ActivityIndicator color={ACCENT} />
             ) : (
-              <Feather name="chevron-right" size={20} color={colors.placeholder} />
+              <Feather name="chevron-right" size={20} color={colors.textDisabled} />
             )}
           </Pressable>
         ))}
@@ -235,7 +235,7 @@ export default function DatosScreen({ module, onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F6F8F6',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
   },
   header: {
@@ -250,14 +250,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   list: {
     gap: spacing.md,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#C7E0F7',
+    borderColor: colors.primarySoft,
     padding: spacing.md,
     gap: spacing.md,
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   buttonTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   statusCard: {
     backgroundColor: colors.background,
@@ -298,18 +298,18 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
-  line: { fontSize: 13, color: colors.textSecondary },
-  bold: { fontWeight: '700', color: colors.textPrimary },
+  line: { fontSize: 13, color: colors.textMuted },
+  bold: { fontWeight: '700', color: colors.text },
   message: { borderRadius: radius.md, padding: spacing.md },
-  ok: { backgroundColor: '#DCF5E3' },
-  okText: { fontSize: 13, color: '#14532D' },
-  fail: { backgroundColor: '#FEE2E2' },
-  failText: { fontSize: 13, color: '#991B1B' },
-  failItem: { fontSize: 12, color: '#991B1B', marginTop: 4 },
-  pendiente: { color: '#B45309' },
+  ok: { backgroundColor: colors.surface },
+  okText: { fontSize: 13, color: colors.success },
+  fail: { backgroundColor: colors.errorSoft },
+  failText: { fontSize: 13, color: colors.error },
+  failItem: { fontSize: 12, color: colors.error, marginTop: 4 },
+  pendiente: { color: colors.warning },
   buttonSubtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
 });

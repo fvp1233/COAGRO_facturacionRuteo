@@ -10,7 +10,7 @@ export default function OptionTile({ title, subtitle, icon, palette, onPress, st
       style={({ pressed }) => [styles.pressable, pressed && styles.pressed, style]}
     >
       <LinearGradient
-        colors={[palette.tint, '#FFFFFF']}
+        colors={[palette.tint, colors.background]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.tile, { borderColor: palette.border }]}
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm + 2,
-    shadowColor: '#0F172A',
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   subtitle: {
     fontSize: 12,

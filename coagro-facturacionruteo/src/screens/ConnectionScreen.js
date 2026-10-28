@@ -10,7 +10,7 @@ import { esErrorVinculada } from '../services/deviceFirma';
 import { createConfig } from '../services/localConfig';
 import { loginEnLinea, registrarUsuario } from '../services/mobileAuth';
 import { hostProtocol, MAX_HANDHELD_LENGTH, normalizeHost, validateConnectionForm } from '../utils/validators';
-import { spacing } from '../theme';
+import { colors, spacing } from '../theme';
 
 // Pantalla de primer uso: se muestra solo si el dispositivo aún no tiene configuración.
 // - "Ya tengo cuenta": login en línea (/fr/mobile/login). Solo si el servidor lo acepta se crea
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   },
   aviso: {
     fontSize: 13,
-    color: '#15803D',
+    color: colors.success,
     marginBottom: spacing.sm,
   },
   firma: {
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   saveError: {
     fontSize: 13,
-    color: '#DC2626',
+    color: colors.error,
     marginBottom: spacing.sm,
   },
 });

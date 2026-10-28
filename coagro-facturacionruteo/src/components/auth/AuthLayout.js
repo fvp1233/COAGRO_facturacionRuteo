@@ -68,7 +68,7 @@ export default function AuthLayout({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.headerBg,
+    backgroundColor: colors.primary,
   },
   scroll: {
     flexGrow: 1,
@@ -93,12 +93,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.text,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   badge: {
     width: 36,
@@ -112,12 +112,12 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
     paddingTop: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
     alignItems: 'center',
     gap: spacing.sm,
   },
   footerText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

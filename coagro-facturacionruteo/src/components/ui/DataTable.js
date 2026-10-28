@@ -7,7 +7,7 @@ import { colors, radius, spacing } from '../../theme';
 
 const PAD = spacing.md;
 const GAP = spacing.md;
-const SELECTED = '#15803D';
+const SELECTED = colors.primary;
 
 // Tabla estándar de la app: TODAS las tablas deben usar este componente.
 // - Paginación (10 registros por página al inicio; el usuario elige 10/25/50/100).
@@ -117,7 +117,7 @@ export default function DataTable({
 
         {desliza ? (
           <View style={styles.hint}>
-            <Feather name="chevrons-right" size={12} color={colors.textSecondary} />
+            <Feather name="chevrons-right" size={12} color={colors.textMuted} />
             <Text style={styles.hintText}>Desliza la tabla para ver todas las columnas</Text>
           </View>
         ) : null}
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF1FA',
+    backgroundColor: colors.surface,
     paddingHorizontal: PAD,
     paddingVertical: spacing.sm + 4,
     gap: GAP,
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   headerHighlight: {
     color: SELECTED,
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     textAlign: 'center',
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   row: {
     flexDirection: 'row',
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     gap: GAP,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
+    borderBottomColor: colors.border,
   },
   rowSelectable: {
     borderLeftWidth: 4,
@@ -188,14 +188,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   rowAlt: {
-    backgroundColor: '#F8FAFD',
+    backgroundColor: colors.surface,
   },
   rowSelected: {
-    backgroundColor: '#DCF5E3',
+    backgroundColor: colors.primarySoft,
     borderLeftColor: SELECTED,
   },
   rowPressed: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
   },
   cell: {
     justifyContent: 'center',
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   cellText: {
     fontSize: 14,
     lineHeight: 19,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   hint: {
     flexDirection: 'row',
@@ -212,11 +212,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: spacing.xs + 2,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
-    backgroundColor: '#F8FAFD',
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
   hintText: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

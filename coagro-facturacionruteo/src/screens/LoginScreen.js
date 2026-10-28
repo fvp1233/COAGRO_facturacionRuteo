@@ -10,7 +10,7 @@ import { checkCredentials } from '../services/localConfig';
 import { setSession } from '../services/session';
 import { initDatabase } from '../db/database';
 import { validateLoginForm } from '../utils/validators';
-import { spacing } from '../theme';
+import { colors, spacing } from '../theme';
 
 // Valida contra el JSON local (funciona sin internet). Si es correcto, guarda las credenciales
 // en memoria (para renovar el token al sincronizar), crea/abre la base SQLite (aplica el
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   formError: {
     fontSize: 13,
-    color: '#DC2626',
+    color: colors.error,
     marginTop: spacing.md,
   },
   submit: {

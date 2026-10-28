@@ -4,8 +4,8 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme';
 
 const ICON_FAMILIES = { Feather, MaterialCommunityIcons };
-const ACTIVE = '#15803D';
-const INACTIVE = '#334155';
+const ACTIVE = colors.primary;
+const INACTIVE = colors.textMuted;
 
 // items: [{ key, label, icon: { family, name }, activeIcon? }]
 // Si el item define activeIcon, su estado activo es el círculo verde relleno;
@@ -28,7 +28,7 @@ export default function BottomTabBar({ items, activeKey, onChange }) {
               <Icon
                 name={icon.name}
                 size={filled ? 18 : 22}
-                color={filled ? '#FFFFFF' : active ? ACTIVE : INACTIVE}
+                color={filled ? colors.onPrimary : active ? ACTIVE : INACTIVE}
               />
               {active && !filled ? <View style={styles.dot} /> : null}
             </View>
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
     paddingTop: spacing.sm,
   },
   tab: {
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
     borderWidth: 3,
-    borderColor: '#BBF7D0',
+    borderColor: colors.primarySoft,
   },
   dot: {
     position: 'absolute',

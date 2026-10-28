@@ -43,14 +43,14 @@ export default function AuthHeader({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.headerBg,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl + spacing.xl,
     overflow: 'hidden',
   },
   blob: {
     position: 'absolute',
-    backgroundColor: colors.headerBlob,
+    backgroundColor: colors.primaryPressed,
     borderRadius: 999,
     opacity: 0.6,
   },
@@ -78,13 +78,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: '800',
-    color: colors.headerText,
+    color: colors.onPrimary,
     marginBottom: spacing.sm,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.headerSubtext,
+    color: colors.onPrimary,
   },
   logo: {
     width: 84,

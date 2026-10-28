@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import DataTable from '../ui/DataTable';
 import { colors, radius, spacing } from '../../theme';
 
-const SELECTED = '#15803D';
+const SELECTED = colors.primary;
 
 const COLUMNS = [
   {
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 15,
     fontWeight: '500',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   nameSelected: {
     fontWeight: '700',
@@ -74,12 +74,12 @@ const styles = StyleSheet.create({
   },
   rnc: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
   code: {
     alignSelf: 'flex-end',
-    backgroundColor: '#EEF1F7',
+    backgroundColor: colors.border,
     borderRadius: radius.sm - 2,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -90,9 +90,9 @@ const styles = StyleSheet.create({
   codeText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.textLabel,
+    color: colors.text,
   },
   codeTextSelected: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
 });

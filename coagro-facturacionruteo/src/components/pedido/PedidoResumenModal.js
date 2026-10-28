@@ -7,7 +7,7 @@ import CenteredHeader from '../ui/CenteredHeader';
 import SelectField from '../ui/SelectField';
 import { colors, radius, spacing } from '../../theme';
 
-const ACCENT = '#0F766E';
+const ACCENT = colors.primary;
 
 // Descuentos 1 y 2 del encabezado: aún no hay de dónde salen (0).
 const DESCUENTO1 = 0;
@@ -127,9 +127,9 @@ export default function PedidoResumenModal({ visible, cliente, encabezado, linea
             style={({ pressed }) => [styles.action, (pressed || guardando) && styles.pressed]}
           >
             {guardando ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.onPrimary} />
             ) : (
-              <Feather name="save" size={20} color="#FFFFFF" />
+              <Feather name="save" size={20} color={colors.onPrimary} />
             )}
             <Text style={styles.actionText}>{guardando ? 'Guardando...' : 'Guardar pedido'}</Text>
           </Pressable>
@@ -140,9 +140,9 @@ export default function PedidoResumenModal({ visible, cliente, encabezado, linea
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
-  info: { fontSize: 12, color: colors.textSecondary },
+  info: { fontSize: 12, color: colors.textMuted },
   card: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
@@ -151,25 +151,25 @@ const styles = StyleSheet.create({
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm + 4 },
   field: { width: '48%', gap: 4 },
-  label: { fontSize: 12, color: colors.textSecondary },
+  label: { fontSize: 12, color: colors.textMuted },
   readOnly: {
     height: 42,
     lineHeight: 42,
     paddingHorizontal: spacing.sm + 4,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
-  destacado: { backgroundColor: '#CCFBF1', color: ACCENT },
+  destacado: { backgroundColor: colors.primarySoft, color: ACCENT },
   bar: {
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
   action: {
     height: 48,
@@ -180,6 +180,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  actionText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  actionText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
   pressed: { opacity: 0.8 },
 });

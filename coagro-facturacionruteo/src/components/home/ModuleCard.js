@@ -14,7 +14,7 @@ export default function ModuleCard({ title, subtitle, icon, badge, palette, onPr
       style={({ pressed }) => [styles.pressable, pressed && styles.pressed, style]}
     >
       <LinearGradient
-        colors={[palette.tint, '#FFFFFF']}
+        colors={[palette.tint, colors.background]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.card, { borderColor: palette.border }]}
@@ -34,7 +34,7 @@ export default function ModuleCard({ title, subtitle, icon, badge, palette, onPr
             end={{ x: 1, y: 1 }}
             style={[styles.iconTile, { shadowColor: palette.gradient[1] }]}
           >
-            <Icon name={icon.name} size={30} color="#FFFFFF" />
+            <Icon name={icon.name} size={30} color={colors.onPrimary} />
           </LinearGradient>
         </View>
 
@@ -130,11 +130,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     marginBottom: 2,
   },
   subtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

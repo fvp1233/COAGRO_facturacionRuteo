@@ -33,7 +33,7 @@ export default function RutaActivaPicker({ visible, rutas = [], actual, obligato
                       Grupo {item.grupoArticulo ?? '—'} · {item.bodegaErp ? `Bodega ${item.bodegaErp}` : 'Sin bodega configurada'}
                     </Text>
                   </View>
-                  {selected ? <Ionicons name="checkmark" size={18} color="#15803D" /> : null}
+                  {selected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
                 </Pressable>
               );
             }}
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
     maxHeight: '70%',
@@ -60,13 +60,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
   subtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
   },
@@ -86,18 +86,18 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   optionSelected: {
     fontWeight: '700',
-    color: '#15803D',
+    color: colors.primary,
   },
   detail: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
   detailWarning: {
-    color: '#B45309',
+    color: colors.warning,
   },
 });

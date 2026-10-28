@@ -72,19 +72,13 @@ export default function HomeScreen({ onOpenModule, onLogout }) {
       <StatusBar style="dark" />
 
       <View style={styles.topBar}>
-        <View style={styles.chip}>
-          <Feather name="smartphone" size={14} color={colors.textPrimary} />
-          <Text style={styles.chipText} numberOfLines={1}>
-            {handheld ? `Handheld ${handheld}` : 'Handheld sin configurar'}
-          </Text>
-        </View>
         <Pressable
           onPress={() => setMenuOpen(true)}
           hitSlop={8}
           accessibilityLabel="Más opciones"
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         >
-          <Feather name="more-vertical" size={18} color={colors.textPrimary} />
+          <Feather name="more-vertical" size={18} color={colors.text} />
         </Pressable>
       </View>
 
@@ -115,6 +109,15 @@ export default function HomeScreen({ onOpenModule, onLogout }) {
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
           <View style={[styles.menu, { top: insets.top + spacing.sm + 44 }]}>
+            {/* Informativo: la handheld configurada en este equipo. */}
+            <View style={styles.menuItem}>
+              <Feather name="smartphone" size={16} color={colors.textMuted} />
+              <View style={styles.menuTexts}>
+                <Text style={styles.menuDetail}>Handheld</Text>
+                <Text style={styles.menuText} numberOfLines={1}>{handheld ?? 'Sin configurar'}</Text>
+              </View>
+            </View>
+            <View style={styles.menuDivider} />
             {rutas.length > 1 ? (
               <Pressable
                 onPress={() => {
@@ -123,7 +126,7 @@ export default function HomeScreen({ onOpenModule, onLogout }) {
                 }}
                 style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
               >
-                <Feather name="map-pin" size={16} color={colors.textPrimary} />
+                <Feather name="map-pin" size={16} color={colors.text} />
                 <View style={styles.menuTexts}>
                   <Text style={styles.menuText}>Cambiar ruta</Text>
                   {rutaActiva ? (
@@ -139,7 +142,7 @@ export default function HomeScreen({ onOpenModule, onLogout }) {
               }}
               style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
             >
-              <Feather name="log-out" size={16} color="#DC2626" />
+              <Feather name="log-out" size={16} color={colors.error} />
               <Text style={[styles.menuText, styles.menuDanger]}>Cerrar sesión</Text>
             </Pressable>
           </View>
@@ -152,33 +155,14 @@ export default function HomeScreen({ onOpenModule, onLogout }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F6F8F6',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
   },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: spacing.sm,
     marginBottom: spacing.md,
-  },
-  chip: {
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 38,
-    paddingHorizontal: spacing.sm + 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.divider,
-  },
-  chipText: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
   },
   iconButton: {
     width: 38,
@@ -186,7 +170,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -206,8 +190,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.divider,
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -220,23 +204,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
   },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: spacing.xs,
+  },
   menuItemPressed: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surface,
   },
   menuTexts: {
     flexShrink: 1,
   },
   menuText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   menuDetail: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 1,
   },
   menuDanger: {
-    color: '#DC2626',
+    color: colors.error,
     fontWeight: '600',
   },
   grid: {

@@ -20,7 +20,7 @@ export default function SelectField({ label, value, options = [], onChange, styl
         style={({ pressed }) => [styles.field, pressed && styles.pressed]}
       >
         <Text style={styles.value} numberOfLines={1}>{value}</Text>
-        <Ionicons name="caret-down" size={10} color={colors.textSecondary} style={styles.caret} />
+        <Ionicons name="caret-down" size={10} color={colors.textMuted} style={styles.caret} />
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -38,7 +38,7 @@ export default function SelectField({ label, value, options = [], onChange, styl
                     style={({ pressed }) => [styles.option, pressed && styles.pressed]}
                   >
                     <Text style={[styles.optionText, selected && styles.optionSelected]}>{item}</Text>
-                    {selected ? <Ionicons name="checkmark" size={18} color="#15803D" /> : null}
+                    {selected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
                   </Pressable>
                 );
               }}
@@ -53,7 +53,7 @@ export default function SelectField({ label, value, options = [], onChange, styl
 const styles = StyleSheet.create({
   label: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginBottom: spacing.xs,
   },
   field: {
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 13,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   caret: {
     position: 'absolute',
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
     maxHeight: '70%',
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -104,11 +104,11 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
     flexShrink: 1,
   },
   optionSelected: {
     fontWeight: '700',
-    color: '#15803D',
+    color: colors.primary,
   },
 });

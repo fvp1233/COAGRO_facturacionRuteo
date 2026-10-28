@@ -14,7 +14,7 @@ export default function ModulePlaceholderScreen({ module, onBack }) {
 
       <View style={styles.header}>
         <Pressable onPress={onBack} hitSlop={8} style={styles.back}>
-          <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>{module.title}</Text>
       </View>
@@ -30,7 +30,7 @@ export default function ModulePlaceholderScreen({ module, onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F6F8F6',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
   },
   header: {
@@ -44,14 +44,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   body: {
     flex: 1,
@@ -61,10 +61,10 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: colors.textPrimary,
+    color: colors.text,
   },
   hint: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
 });

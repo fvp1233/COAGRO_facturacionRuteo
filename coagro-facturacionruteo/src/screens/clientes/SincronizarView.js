@@ -18,5 +18,5 @@ export default function SincronizarView({ onBack }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  text: { fontSize: 14, color: colors.textSecondary },
+  text: { fontSize: 14, color: colors.textMuted },
 });

@@ -51,7 +51,7 @@ export default function FirmaEquipo({ label = 'Firma del equipo', style }) {
           hitSlop={8}
           style={({ pressed }) => [styles.copy, pressed && styles.pressed]}
         >
-          <Feather name={copiada ? 'check' : 'copy'} size={16} color={copiada ? '#15803D' : colors.textSecondary} />
+          <Feather name={copiada ? 'check' : 'copy'} size={16} color={copiada ? colors.success : colors.textMuted} />
           <Text style={[styles.copyText, copiada && styles.copiedText]}>{copiada ? 'Copiada' : 'Copiar'}</Text>
         </Pressable>
       </View>
@@ -60,20 +60,20 @@ export default function FirmaEquipo({ label = 'Firma del equipo', style }) {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
   readonly: {
     minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F3F5F9',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.sm,
   },
-  value: { flex: 1, fontSize: 13, color: colors.textPrimary, fontFamily: 'monospace' },
+  value: { flex: 1, fontSize: 13, color: colors.text, fontFamily: 'monospace' },
   copy: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pressed: { opacity: 0.6 },
-  copyText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
-  copiedText: { color: '#15803D' },
+  copyText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  copiedText: { color: colors.success },
 });

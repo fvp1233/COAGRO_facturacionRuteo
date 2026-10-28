@@ -133,7 +133,7 @@ function Field({ label, value, style, lines = 2 }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
   card: {
     backgroundColor: colors.background,
@@ -143,21 +143,21 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.sm },
   half: { flex: 1 },
-  label: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
   readonly: {
     minHeight: 42,
     borderRadius: radius.sm + 2,
-    backgroundColor: '#F3F5F9',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm + 2,
     justifyContent: 'center',
     paddingVertical: spacing.sm,
   },
-  value: { fontSize: 14, color: colors.textPrimary },
-  vacio: { color: colors.placeholder, fontStyle: 'italic' },
+  value: { fontSize: 14, color: colors.text },
+  vacio: { color: colors.textDisabled, fontStyle: 'italic' },
   warning: {
     fontSize: 13,
-    color: '#92400E',
-    backgroundColor: '#FEF3C7',
+    color: colors.error,
+    backgroundColor: colors.errorSoft,
     borderRadius: radius.md,
     padding: spacing.md,
   },

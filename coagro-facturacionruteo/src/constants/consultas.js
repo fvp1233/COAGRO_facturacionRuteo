@@ -1,57 +1,59 @@
+import { colors } from '../theme';
+
 // Opciones de consulta: pestaña inferior Consulta del módulo Clientes y Menú Consultar del cliente.
 export const CONSULTAS = [
   {
     id: 'cliente',
     title: 'Cliente',
     icon: 'card-account-details',
-    palette: { accent: '#16A34A', tint: '#ECFDF3', border: '#BBF7D0' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'inventario',
     title: 'Inventario',
     icon: 'archive',
-    palette: { accent: '#2563EB', tint: '#EFF6FF', border: '#BFDBFE' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'cobros',
     title: 'Cobros',
     icon: 'cash',
-    palette: { accent: '#C2410C', iconColor: '#D97706', tint: '#FFFBEB', border: '#FDE68A' },
+    palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'documentos',
     title: 'Documentos',
     icon: 'receipt-text',
-    palette: { accent: '#4F46E5', tint: '#EEF2FF', border: '#C7D2FE' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'notas-credito',
     title: 'Notas Créd.',
     icon: 'invoice',
-    palette: { accent: '#9333EA', tint: '#FAF5FF', border: '#E9D5FF' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'pedidos',
     title: 'Pedidos',
     icon: 'cart-plus',
-    palette: { accent: '#0F766E', iconColor: '#0D9488', tint: '#F0FDFA', border: '#99F6E4' },
+    palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'pedidos-estado',
     title: 'Ped. Estado',
     icon: 'autorenew',
-    palette: { accent: '#0891B2', tint: '#ECFEFF', border: '#A5F3FC' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'devolucion',
     title: 'Devolución',
     icon: 'clipboard-arrow-left',
-    palette: { accent: '#E11D48', tint: '#FFF1F2', border: '#FECDD3' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
     id: 'articulos',
     title: 'Artículos',
     icon: 'tag',
-    palette: { accent: '#15803D', tint: '#ECFDF3', border: '#BBF7D0' },
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
 ];

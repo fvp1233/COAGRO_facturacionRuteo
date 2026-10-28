@@ -37,7 +37,7 @@ export default function ArticulosAgregadosModal({ visible, lineas, total, format
       width: 32,
       render: (l) => (
         <Pressable onPress={() => onEliminar(l.codigo)} hitSlop={10} style={styles.delete}>
-          <Feather name="trash-2" size={18} color="#DC2626" />
+          <Feather name="trash-2" size={18} color={colors.error} />
         </Pressable>
       ),
     },
@@ -67,10 +67,10 @@ export default function ArticulosAgregadosModal({ visible, lineas, total, format
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F5FA' },
+  root: { flex: 1, backgroundColor: colors.surface },
   scroll: { flex: 1 },
   content: { padding: spacing.md },
-  num: { textAlign: 'right', fontSize: 14, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  num: { textAlign: 'right', fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
   delete: { alignItems: 'center' },
   bar: {
     flexDirection: 'row',
@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.border,
   },
-  barLabel: { fontSize: 13, color: colors.textSecondary },
-  barTotal: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  barLabel: { fontSize: 13, color: colors.textMuted },
+  barTotal: { fontSize: 18, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
 });

@@ -8,7 +8,7 @@ export default function ScreenHeader({ eyebrow = 'COAGRO GANADERÍA', title, onB
   return (
     <View style={styles.container}>
       <Pressable onPress={onBack} hitSlop={10} style={styles.iconButton}>
-        <Feather name="arrow-left" size={24} color={colors.textPrimary} />
+        <Feather name="arrow-left" size={24} color={colors.text} />
       </Pressable>
 
       <View style={styles.titles}>
@@ -17,7 +17,7 @@ export default function ScreenHeader({ eyebrow = 'COAGRO GANADERÍA', title, onB
       </View>
 
       <Pressable onPress={onMenu} hitSlop={10} style={styles.iconButton}>
-        <Feather name="more-vertical" size={22} color={colors.textPrimary} />
+        <Feather name="more-vertical" size={22} color={colors.text} />
       </Pressable>
       <Image source={logo} style={styles.logo} resizeMode="contain" />
     </View>
@@ -43,12 +43,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   logo: {
     width: 36,

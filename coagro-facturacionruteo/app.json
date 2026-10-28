@@ -13,7 +13,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "package": "com.fvp1233.coagrofacturacionruteo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,6 +31,14 @@
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

@@ -12,7 +12,7 @@ import { PARAMETROS } from '../constants/parametros';
 import { colors, radius, spacing } from '../theme';
 
 const COLUMNS = 2;
-const ACCENT = '#4F46E5';
+const ACCENT = colors.primary;
 
 // Parámetros que ya tienen pantalla propia.
 const VISTAS = {
@@ -80,7 +80,7 @@ export default function ParametrosScreen({ onBack }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F4F5FA',
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -107,11 +107,11 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: colors.text,
   },
   infoMeta: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: 2,
   },
   grid: {
