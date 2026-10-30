@@ -6,20 +6,18 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import DataTable from '../../components/ui/DataTable';
 import { getDocumentosCobro } from '../../repositories/cobros';
-import { formatFechaDoc, formatMonto } from '../../utils/formato';
+import { formatFechaDoc, formatMonto, formatVendedor } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
 const claveDoc = (d) => `${d.codTipo}|${d.documento}`;
 
+// Los montos a pagar y el saldo en la moneda del cobro se ven abajo, al seleccionar el documento.
 const COLUMNS = [
-  { key: 'documento', title: 'Documento', width: 200 },
-  { key: 'montoAPagarLoc', title: 'Monto a pagar Loc', width: 120, align: 'right', render: (item) => <Monto value={item.montoAPagarLoc} /> },
-  { key: 'montoAPagarDolar', title: 'Monto a pagar Dólar', width: 130, align: 'right', render: (item) => <Monto value={item.montoAPagarDolar} /> },
-  { key: 'saldoDocLocal', title: 'Saldo doc Local', width: 120, align: 'right', render: (item) => <Monto value={item.saldoDocLocal} /> },
+  { key: 'documento', title: 'Documento', width: 140, grow: true },
   { key: 'saldoDocDolar', title: 'Saldo doc Dólar', width: 120, align: 'right', render: (item) => <Monto value={item.saldoDocDolar} /> },
-  { key: 'tipoCambio', title: 'Tipo cambio', width: 90, align: 'right', render: (item) => <Monto value={item.tipoCambio} /> },
   { key: 'fecha', title: 'Hecho', width: 80, render: (item) => <Celda text={formatFechaDoc(item.fecha)} /> },
   { key: 'vence', title: 'Vence', width: 80, render: (item) => <Celda text={formatFechaDoc(item.vence)} /> },
+  { key: 'vendedor', title: 'Vendedor', width: 150, grow: true, render: (item) => <Celda text={formatVendedor(item)} /> },
 ];
 
 // Documentos pendientes del cliente (alCXC_PEN_COB, descargados con Datos > Cargar datos) para el
@@ -84,6 +82,7 @@ export default function CobroDocumentosView({ cliente, ruta, moneda, tipoPago, o
             <Field label="Saldo documento" value={doc ? formatMonto(enDolar ? doc.saldoDocDolar : doc.saldoDocLocal) : ''} />
             <Field label="Monto pagar" value={doc ? formatMonto(enDolar ? doc.montoAPagarDolar : doc.montoAPagarLoc) : ''} />
           </View>
+          <Field label="Vendedor" value={doc ? formatVendedor(doc) : ''} />
           <Field label="Total a pagar" value={formatMonto(totalAPagar)} total />
         </View>
       </ScrollView>

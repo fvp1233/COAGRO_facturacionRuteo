@@ -5,6 +5,12 @@
 // http://localhost:5000/api/v1/fr/sync/clientes).
 export const API_PREFIX = '/api/v1';
 
+// Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
+// Con null se usa el servidor guardado en la pantalla de Conexión.
+// export const BASE_URL = 'http://192.168.1.150:5000';   // En línea
+export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
+//export const BASE_URL = null;
+
 // /fr/mobile/registro y /fr/mobile/login no llevan token; el resto exige el token de la app
 // (Authorization: Bearer) y rol RUTA. Las rutas de la sync salen del token (no se manda ?ruta=).
 export const PATHS = {
@@ -17,6 +23,8 @@ export const PATHS = {
   syncClientesCia: '/fr/sync/clientesCia',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
+  // Pendientes de cobro solo del agente (vendedor) del token.
+  syncCobrosAgente: '/fr/sync/cobrosAgente',
   syncConsecutivos: '/fr/sync/consecutivos',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',

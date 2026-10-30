@@ -136,4 +136,52 @@ export const migrations = [
     }
     await db.execAsync('UPDATE CLIENTE_UBICACION SET ENVIADO = 1;');
   },
+
+  // v10: documentos pendientes de cobro del agente (vendedor) del token (/fr/sync/cobrosAgente).
+  // Misma estructura que alCXC_PEN_COB, en tabla aparte: alCXC_PEN_COB guarda los de todas las
+  // rutas de la handheld y esta solo los que le toca cobrar al usuario (Calendario).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS alCXC_PEN_COB_AGENTE (
+        "COD_CIA" TEXT,
+        "COD_TIP_DC" TEXT NOT NULL,
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_DOC" TEXT NOT NULL,
+        "COD_CLT" TEXT NOT NULL,
+        "FEC_DOC_FT" TEXT NOT NULL,
+        "FEC_PRO" TEXT NOT NULL,
+        "FEC_VEN" TEXT NOT NULL,
+        "IND_MON" TEXT,
+        "IND_ANL" TEXT,
+        "SALDO_DOLAR" REAL,
+        "SALDO_LOCAL" REAL,
+        "MONTO_DOLAR" REAL,
+        "MONTO_LOCAL" REAL,
+        "TIP_CMB_DOL" REAL,
+        "CONDICION_PAGO" TEXT,
+        "DEV_ANUL" TEXT DEFAULT 'N',
+        "SUBTOTAL" REAL,
+        "TIP_CMB_LOC" REAL,
+        "CLASE_DOCUMENTO" TEXT,
+        "INCOTERMS" TEXT,
+        "FORMAS_PAGO" TEXT,
+        "NATURALEZA_OPERACION" TEXT,
+        "CUFE" TEXT,
+        "CODIGOQR" TEXT,
+        "INDICADOR_FACTURACION" TEXT,
+        PRIMARY KEY ("COD_TIP_DC", "COD_ZON", "NUM_DOC", "COD_CLT")
+      );
+    `);
+  },
+
+  // v11: agente (vendedor) dueño de la ruta del documento y su nombre; llegan en /fr/sync/cobros y
+  // /fr/sync/cobrosAgente (null si la ruta no tiene asignación activa).
+  async (db) => {
+    for (const tabla of ['alCXC_PEN_COB', 'alCXC_PEN_COB_AGENTE']) {
+      await db.execAsync(`
+        ALTER TABLE ${tabla} ADD COLUMN AGENTE TEXT;
+        ALTER TABLE ${tabla} ADD COLUMN NOMBRE_AGENTE TEXT;
+      `);
+    }
+  },
 ];

@@ -21,3 +21,7 @@ export const formatFechaDoc = (v) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v ?? '');
   return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '';
 };
+
+// Vendedor (agente dueño de la ruta) de un documento: nombre, o el código si no hay nombre.
+export const formatVendedor = (d) =>
+  d?.nombreAgente || (d?.agente ? `Agente ${d.agente}` : 'Sin vendedor asignado');

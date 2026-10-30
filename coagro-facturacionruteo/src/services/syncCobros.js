@@ -9,8 +9,19 @@ const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v)
 
 // Descarga los documentos pendientes de cobro (alCXC_PEN_COB) y los guarda en SQLite en UNA
 // transacción: o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
-export async function syncCobros() {
-  const json = await getJson(PATHS.syncCobros);
+export function syncCobros() {
+  return descargarCobros(PATHS.syncCobros, 'alCXC_PEN_COB', 'sync_cobros_at');
+}
+
+// Igual que syncCobros, pero solo los documentos que le toca cobrar al agente (vendedor) del
+// token; se guardan aparte en alCXC_PEN_COB_AGENTE (Calendario > Mis documentos vencidos).
+export function syncCobrosAgente() {
+  return descargarCobros(PATHS.syncCobrosAgente, 'alCXC_PEN_COB_AGENTE', 'sync_cobros_agente_at');
+}
+
+// tabla y metaKey son constantes de este archivo (no vienen del usuario).
+async function descargarCobros(path, tabla, metaKey) {
+  const json = await getJson(path);
   const data = json?.result;
   if (!data || !Array.isArray(data.documentos)) {
     throw new ApiError('La respuesta del servidor no tiene el formato esperado (documentos).');
@@ -26,16 +37,16 @@ export async function syncCobros() {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
     // Los pendientes se reemplazan completos con lo que manda el servidor.
-    await db.runAsync('DELETE FROM alCXC_PEN_COB');
+    await db.runAsync(`DELETE FROM ${tabla}`);
 
     for (const d of documentos) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO alCXC_PEN_COB
+        `INSERT OR REPLACE INTO ${tabla}
            (COD_CIA, COD_ZON, COD_TIP_DC, NUM_DOC, COD_CLT, SALDO_DOLAR, SALDO_LOCAL,
             MONTO_DOLAR, MONTO_LOCAL, FEC_DOC_FT, FEC_PRO, FEC_VEN, IND_MON, IND_ANL, TIP_CMB_DOL,
             CONDICION_PAGO, SUBTOTAL, TIP_CMB_LOC, CLASE_DOCUMENTO, INCOTERMS, FORMAS_PAGO,
-            NATURALEZA_OPERACION, CUFE, CODIGOQR, INDICADOR_FACTURACION)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            NATURALEZA_OPERACION, CUFE, CODIGOQR, INDICADOR_FACTURACION, AGENTE, NOMBRE_AGENTE)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           text(d.COD_CIA),
           textOr(d.COD_ZON),
@@ -62,13 +73,15 @@ export async function syncCobros() {
           text(d.CUFE),
           text(d.CODIGOQR),
           text(d.INDICADOR_FACTURACION),
+          text(d.AGENTE),
+          text(d.NOMBRE_AGENTE),
         ]
       );
     }
 
     await db.runAsync(
-      "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_cobros_at', ?)",
-      [new Date().toISOString()]
+      'INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)',
+      [metaKey, new Date().toISOString()]
     );
   });
 

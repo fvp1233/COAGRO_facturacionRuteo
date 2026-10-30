@@ -9,21 +9,21 @@ import DataTable from '../../components/ui/DataTable';
 import { getDocumentosCobro } from '../../repositories/cobros';
 import { descargarDocumentoPdf } from '../../services/documentoPdf';
 import { isNetworkError } from '../../services/api';
-import { formatFechaDoc, formatMonto } from '../../utils/formato';
+import { formatFechaDoc, formatMonto, formatVendedor } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
 const COLUMNS = [
-  { key: 'tipo', title: 'Tipo', width: 90 },
   { key: 'documento', title: 'Documento', width: 110, grow: true },
   { key: 'vence', title: 'Vence', width: 80 },
   { key: 'saldo', title: 'Saldo', width: 100, align: 'right' },
-  { key: 'monto', title: 'Monto', width: 100, align: 'right' },
+  { key: 'vendedor', title: 'Vendedor', width: 150, grow: true },
 ];
 
 const ACCENT = colors.primary;
 const claveFila = (item) => `${item.codTipo}|${item.documento}`;
 
-// Saldo y monto en la moneda del documento (IND_MON = 'D' → dólar; si no, local).
+// Saldo en la moneda del documento (IND_MON = 'D' → dólar; si no, local). Vendedor = agente dueño
+// de la ruta del documento (igual que en el Calendario). tipo no es columna: se usa en la barra.
 const aFila = (d) => {
   const enDolar = String(d.moneda).toUpperCase().startsWith('D');
   return {
@@ -32,7 +32,7 @@ const aFila = (d) => {
     documento: d.documento,
     vence: formatFechaDoc(d.vence),
     saldo: formatMonto(enDolar ? d.saldoDocDolar : d.saldoDocLocal),
-    monto: formatMonto(enDolar ? d.montoDocDolar : d.montoDocLocal),
+    vendedor: formatVendedor(d),
   };
 };
 
@@ -101,14 +101,16 @@ export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
           selectedKey={seleccionado}
           emptyText="El cliente no tiene documentos"
         />
+        {doc ? (
+          <Text style={styles.docInfo} selectable>
+            Documento seleccionado: <Text style={styles.docInfoValue}>{doc.documento}</Text>
+          </Text>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
       {doc ? (
         <View style={styles.bar}>
-          <Text style={styles.barText} numberOfLines={1}>
-            {doc.tipo ? `${doc.tipo} ` : ''}{doc.documento}
-          </Text>
           <Pressable
             onPress={imprimir}
             disabled={generando}
@@ -138,16 +140,17 @@ const styles = StyleSheet.create({
   clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
   clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   error: { fontSize: 12, color: colors.error },
+  docInfo: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  docInfoValue: { fontWeight: '700', color: colors.text },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'center',
     padding: spacing.md,
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  barText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
   action: {
     height: 48,
     paddingHorizontal: spacing.lg,

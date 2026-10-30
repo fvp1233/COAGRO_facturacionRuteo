@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { syncClientes } from '../services/syncClientes';
 import { syncClientesCia } from '../services/syncClientesCia';
 import { syncArticulos } from '../services/syncArticulos';
-import { syncCobros } from '../services/syncCobros';
+import { syncCobros, syncCobrosAgente } from '../services/syncCobros';
 import { syncConsecutivos } from '../services/syncConsecutivos';
 import { refrescarSesion } from '../services/mobileAuth';
 import { contarPendientes, enviarPendientes } from '../services/enviarDatos';
@@ -123,6 +123,7 @@ export default function DatosScreen({ module, onBack }) {
       const clientesCia = await syncClientesCia();
       const articulos = await syncArticulos();
       const cobros = await syncCobros();
+      const cobrosAgente = await syncCobrosAgente();
       const consecutivos = await syncConsecutivos();
       setResumen({
         ...clientes,
@@ -130,8 +131,9 @@ export default function DatosScreen({ module, onBack }) {
         articulos: articulos.articulos,
         precios: articulos.precios,
         documentos: cobros.documentos,
+        documentosAgente: cobrosAgente.documentos,
         consecutivos: consecutivos.consecutivos,
-        omitidos: clientes.omitidos + clientesCia.omitidos + articulos.omitidos + cobros.omitidos + consecutivos.omitidos,
+        omitidos: clientes.omitidos + clientesCia.omitidos + articulos.omitidos + cobros.omitidos + cobrosAgente.omitidos + consecutivos.omitidos,
       });
     } catch (e) {
       mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
@@ -209,7 +211,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios,{resumen.documentos} documentos por cobrar, {resumen.consecutivos} consecutivos de ruta.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>

@@ -2,7 +2,7 @@ import { getDeviceFirma } from './deviceFirma';
 import { readConfig } from './localConfig';
 import { getSession } from './session';
 import { getToken, saveToken } from './tokenStore';
-import { API_PREFIX, PATHS, TIMEOUT_MS } from '../config/api';
+import { API_PREFIX, BASE_URL, PATHS, TIMEOUT_MS } from '../config/api';
 import { normalizeEmail } from '../utils/validators';
 
 // code:
@@ -55,7 +55,7 @@ function messageFromBody(body) {
 //   servidor responde JSON es un error ({ success:false, errors }) y se lanza como tal.
 // - timeout: ms de espera (por defecto TIMEOUT_MS).
 async function send(method, path, { body, base, auth = true, archivo = false, timeout = TIMEOUT_MS } = {}) {
-  const url = `${base ?? (await baseUrl())}${API_PREFIX}${path}`;
+  const url = `${BASE_URL ?? base ?? (await baseUrl())}${API_PREFIX}${path}`;
   const headers = { Accept: archivo ? '*/*' : 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth) {

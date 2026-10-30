@@ -6,13 +6,18 @@ import { StatusBar } from 'expo-status-bar';
 
 import CenteredHeader from '../components/ui/CenteredHeader';
 import { getVencimientos } from '../repositories/cobros';
-import { formatMonto } from '../utils/formato';
+import { formatMonto, formatVendedor } from '../utils/formato';
 import { colors, radius, spacing } from '../theme';
 
 const ACCENT = colors.primary;
 const VENCIDO = colors.error;
 const POR_VENCER = colors.warning;
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+// Vistas del calendario: todos los documentos del equipo o solo los del agente (vendedor) del usuario.
+const VISTAS = [
+  { id: 'todos', label: 'Todos los documentos' },
+  { id: 'mios', label: 'Mis documentos vencidos' },
+];
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -44,6 +49,7 @@ function tituloDia(clave) {
 // Módulo Calendario: vencimientos de los documentos pendientes de cobro (alCXC_PEN_COB, descargados
 // con Datos > Cargar datos). El mes marca los días con vencimientos (rojo = ya vencido, ámbar = por
 // vencer); al tocar un día se listan sus documentos con el cliente, el número y el saldo.
+// Arriba se elige la vista: todos los documentos o solo los que le toca cobrar al usuario.
 export default function CalendarioScreen({ onBack }) {
   const insets = useSafeAreaInsets();
   const hoy = hoyClave();
@@ -52,13 +58,17 @@ export default function CalendarioScreen({ onBack }) {
     return { anio: d.getFullYear(), mes: d.getMonth() };
   });
   const [seleccionado, setSeleccionado] = useState(hoy);
+  const [vista, setVista] = useState('todos');
   const [documentos, setDocumentos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelado = false;
-    getVencimientos()
+    setCargando(true);
+    setError('');
+    setDocumentos([]);
+    getVencimientos({ soloAgente: vista === 'mios' })
       .then((lista) => {
         if (!cancelado) setDocumentos(lista);
       })
@@ -71,7 +81,7 @@ export default function CalendarioScreen({ onBack }) {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [vista]);
 
   // Documentos agrupados por fecha de vencimiento.
   const porDia = useMemo(() => {
@@ -106,12 +116,31 @@ export default function CalendarioScreen({ onBack }) {
       <CenteredHeader title="Calendario" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.segment}>
+          {VISTAS.map((v) => {
+            const activa = v.id === vista;
+            return (
+              <Pressable
+                key={v.id}
+                onPress={() => setVista(v.id)}
+                style={[styles.segmentItem, activa && styles.segmentItemActive]}
+              >
+                <Text style={[styles.segmentText, activa && styles.segmentTextActive]} numberOfLines={1}>
+                  {v.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <View style={styles.summaryCard}>
           <View style={styles.summaryIcon}>
             <MaterialCommunityIcons name="calendar-alert" size={22} color={ACCENT} />
           </View>
           <View style={styles.summaryTexts}>
-            <Text style={styles.summaryTitle}>Vencimientos de documentos</Text>
+            <Text style={styles.summaryTitle}>
+              {vista === 'mios' ? 'Mis documentos por cobrar' : 'Vencimientos de documentos'}
+            </Text>
             <Text style={styles.summaryMeta} numberOfLines={1}>
               {vencidos.length} vencidos · {formatMonto(vencidos.reduce((s, d) => s + Number(d.saldoLocal ?? 0), 0))}
             </Text>
@@ -204,6 +233,12 @@ export default function CalendarioScreen({ onBack }) {
                 {d.tipo ? `${d.tipo} ` : ''}{d.documento}
               </Text>
               <Text style={styles.itemMeta} numberOfLines={1}>Ruta {d.ruta}</Text>
+              <View style={styles.itemAgent}>
+                <Feather name="user" size={12} color={colors.textMuted} />
+                <Text style={styles.itemMeta} numberOfLines={1}>
+                  {formatVendedor(d)}
+                </Text>
+              </View>
             </View>
             <Text style={styles.itemAmount}>{formatMonto(d.saldoLocal)}</Text>
           </View>
@@ -216,6 +251,24 @@ export default function CalendarioScreen({ onBack }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   content: { padding: spacing.md, gap: spacing.md },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 3,
+  },
+  segmentItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.pill,
+  },
+  segmentItemActive: { backgroundColor: ACCENT },
+  segmentText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  segmentTextActive: { color: colors.onPrimary },
   summaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,5 +379,6 @@ const styles = StyleSheet.create({
   itemTexts: { flex: 1, gap: 2 },
   itemName: { fontSize: 14, fontWeight: '700', color: colors.text },
   itemMeta: { fontSize: 12, color: colors.textMuted },
+  itemAgent: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
   itemAmount: { fontSize: 15, fontWeight: '700', color: colors.text },
 });
