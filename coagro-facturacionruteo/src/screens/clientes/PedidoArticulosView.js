@@ -11,9 +11,9 @@ import Checkbox from '../../components/ui/Checkbox';
 import DataTable from '../../components/ui/DataTable';
 import SearchBar from '../../components/ui/SearchBar';
 import { getArticulosPedido } from '../../repositories/articulos';
-import { guardarPedido } from '../../repositories/pedidos';
+import { guardarPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
-import { formatCantidad, formatMonto, formatPorcentaje } from '../../utils/formato';
+import { formatCantidad, formatMontoMoneda as monto, formatPorcentaje } from '../../utils/formato';
 import { normalizar } from '../../utils/text';
 import { colors, radius, spacing } from '../../theme';
 
@@ -30,12 +30,6 @@ const valor = (texto) => {
   const n = Number(String(texto ?? '').replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
 };
-
-// Monto en la moneda del precio: 'D' en dólares ($); otra moneda lleva su código delante.
-const monto = (n, moneda) =>
-  moneda === 'D'
-    ? formatMonto(n)
-    : `${moneda ?? ''} ${Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 
 // Bonificación: aún no se descargan las tablas de bonificación (BONIFICACION_CLIART / _NIVEL).
 const BONIFICACION = 0;
@@ -127,8 +121,15 @@ function Dato({ label, value, alerta = false }) {
 // de agregados, donde se pueden eliminar. Total = suma de todas las líneas agregadas.
 // encabezado: lo elegido en PedidoView (país, condición de pago, nivel de precio, moneda, subtipo...).
 // onGuardado(numero): se llama después de guardar el pedido (el contenedor registra la visita y
-// vuelve al menú del cliente).
-export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack, onGuardado }) {
+// vuelve al menú del cliente). tipo: TIPOS_PEDIDO.pedido o .cotizacion (cambia textos y TIP_DOC).
+export default function PedidoArticulosView({
+  cliente,
+  ruta,
+  encabezado,
+  tipo = TIPOS_PEDIDO.pedido,
+  onBack,
+  onGuardado,
+}) {
   const insets = useSafeAreaInsets();
   const [articulos, setArticulos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -245,7 +246,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
 
   const eliminar = (codigo) => {
     const l = agregados.find((x) => x.codigo === codigo);
-    Alert.alert('Eliminar artículo', `¿Quitar ${l?.descripcion ?? codigo} del pedido?`, [
+    Alert.alert('Eliminar artículo', `¿Quitar ${l?.descripcion ?? codigo} ${tipo.del}?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar',
@@ -257,7 +258,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
 
   const siguiente = () => {
     if (!agregados.length) {
-      Alert.alert('Resumen del pedido', 'Agrega al menos un artículo con el botón +.');
+      Alert.alert(`Resumen ${tipo.del}`, 'Agrega al menos un artículo con el botón +.');
       return;
     }
     setVerResumen(true);
@@ -276,12 +277,13 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
         lineas: agregados,
         entrega,
         fin: new Date(),
+        tipoDoc: tipo.tipoDoc,
       });
       setVerResumen(false);
-      Alert.alert('Pedido guardado', `Se guardó el pedido ${numero}.`);
+      Alert.alert(tipo.guardado, `Se guardó ${tipo.el} ${numero}.`);
       await onGuardado?.(numero);
     } catch (e) {
-      Alert.alert('No se pudo guardar el pedido', e?.message || 'Error al insertar en la base local.');
+      Alert.alert(`No se pudo guardar ${tipo.el}`, e?.message || 'Error al insertar en la base local.');
     }
   };
 
@@ -290,7 +292,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
       onBack?.();
       return;
     }
-    Alert.alert('Salir del pedido', 'Se perderán los artículos capturados. ¿Deseas salir?', [
+    Alert.alert(`Salir ${tipo.del}`, 'Se perderán los artículos capturados. ¿Deseas salir?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: onBack },
     ]);
@@ -299,7 +301,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Artículos del pedido" onBack={salir} />
+      <CenteredHeader title={`Artículos ${tipo.del}`} onBack={salir} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.infoRow}>
@@ -406,7 +408,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
           ) : null}
         </Pressable>
         <View style={styles.barTotal}>
-          <Text style={styles.barTotalLabel}>Total del pedido</Text>
+          <Text style={styles.barTotalLabel}>Total {tipo.del}</Text>
           <Text style={styles.barTotalValue}>{monto(totalPedido, monedaPedido)}</Text>
         </View>
         <Pressable onPress={agregar} style={({ pressed }) => [styles.barButton, styles.barPrimary, pressed && styles.pressed]}>
@@ -424,6 +426,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
         visible={verAgregados}
         lineas={agregados}
         total={totalPedido}
+        tipo={tipo}
         formatMonto={monto}
         onEliminar={eliminar}
         onClose={() => setVerAgregados(false)}
@@ -432,6 +435,7 @@ export default function PedidoArticulosView({ cliente, ruta, encabezado, onBack,
         visible={verResumen}
         cliente={cliente}
         encabezado={encabezado}
+        tipo={tipo}
         lineas={agregados}
         formatMonto={monto}
         onGuardar={guardar}

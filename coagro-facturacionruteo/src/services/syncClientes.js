@@ -1,5 +1,4 @@
 import { getJson, ApiError } from './api';
-import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
 
 // Del servidor llegan campos de SQL Server (a veces con espacios al final): se limpian.
@@ -7,10 +6,10 @@ const text = (v) => (v === null || v === undefined ? null : String(v).trim());
 const textOr = (v, fallback = '') => text(v) ?? fallback;
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
-// Descarga rutas, clientes, asignaciones y ubicaciones y las guarda en SQLite en UNA
-// transacción: o se guarda todo o no se toca nada (si falla a mitad, los datos anteriores
-// siguen intactos). Devuelve un resumen con los conteos.
-export async function syncClientes() {
+// Descarga rutas, clientes, asignaciones y ubicaciones (reemplazan las tablas locales).
+// Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama
+// guardar dentro de UNA transacción con el resto de la carga (o se guarda todo o no se toca nada).
+export async function descargarClientes() {
   const json = await getJson(PATHS.syncClientes);
   const data = json?.result;
   if (!data || !Array.isArray(data.clientes) || !Array.isArray(data.rutaOrden)) {
@@ -43,8 +42,7 @@ export async function syncClientes() {
     data.rutaOrden.length - rutaOrden.length +
     (Array.isArray(data.ubicaciones) ? data.ubicaciones.length : 0) - ubicaciones.length;
 
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
+  const guardar = async (db) => {
     // Los maestros se reemplazan completos con lo que manda el servidor.
     await db.runAsync('DELETE FROM RUTA_RT');
     await db.runAsync('DELETE FROM CLIENTE');
@@ -124,9 +122,9 @@ export async function syncClientes() {
       "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_clientes_at', ?)",
       [new Date().toISOString()]
     );
-  });
+  };
 
-  return {
+  const resumen = {
     rutas: rutas.length,
     clientes: clientes.length,
     asignaciones: rutaOrden.length,
@@ -134,4 +132,5 @@ export async function syncClientes() {
     efectividades: efectividades.length,
     omitidos,
   };
+  return { guardar, resumen };
 }

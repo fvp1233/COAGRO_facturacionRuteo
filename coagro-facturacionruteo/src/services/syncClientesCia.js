@@ -1,5 +1,4 @@
 import { getJson, ApiError } from './api';
-import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
 
 // Del servidor llegan campos de SQL Server (a veces con espacios al final): se limpian.
@@ -68,11 +67,11 @@ const CATALOGOS = [
   },
 ];
 
-// Descarga los datos comerciales de los clientes de la handheld (CLIENTE_CIA) y sus catálogos, y
-// los guarda en SQLite en UNA transacción: o se guarda todo o no se toca nada. Devuelve un resumen
-// con los conteos.
+// Descarga los datos comerciales de los clientes de la handheld (CLIENTE_CIA) y sus catálogos.
+// Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama
+// guardar dentro de UNA transacción con el resto de la carga (o se guarda todo o no se toca nada).
 // La tabla local tiene llave COD_CLT: si un cliente trae filas de varias compañías, queda la última.
-export async function syncClientesCia() {
+export async function descargarClientesCia() {
   const json = await getJson(PATHS.syncClientesCia);
   const data = json?.result;
   if (!data || !Array.isArray(data.clientesCia)) {
@@ -91,8 +90,7 @@ export async function syncClientesCia() {
     data.clientesCia.length - clientesCia.length +
     catalogos.reduce((n, c) => n + data[c.arreglo].length - c.filas.length, 0);
 
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
+  const guardar = async (db) => {
     await db.runAsync('DELETE FROM CLIENTE_CIA');
     for (const c of clientesCia) {
       await db.runAsync(
@@ -111,7 +109,7 @@ export async function syncClientesCia() {
         );
       }
     }
-  });
+  };
 
-  return { clientesCia: clientesCia.length, omitidos };
+  return { guardar, resumen: { clientesCia: clientesCia.length, omitidos } };
 }

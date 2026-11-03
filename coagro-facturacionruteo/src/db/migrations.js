@@ -184,4 +184,22 @@ export const migrations = [
       `);
     }
   },
+
+  // v12: aprobaciones de cotizaciones (TIP_DOC 'C' -> 'F') hechas en el equipo, pendientes de subir
+  // en aprobaciones[] de POST /fr/sync/enviar. FEC_PED = día de aprobación; FEC_DES = entrega elegida.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS COTIZACION_APROBACION (
+        "COD_CIA" TEXT,
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_PED" TEXT NOT NULL,
+        "FEC_PED" TEXT NOT NULL,
+        "FEC_DES" TEXT,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        PRIMARY KEY ("COD_ZON", "NUM_PED")
+      );
+    `);
+  },
 ];

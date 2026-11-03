@@ -7,7 +7,8 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
-import { getDatosPedido } from '../../repositories/pedidos';import { colors, radius, spacing } from '../../theme';
+import { getDatosPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
+import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
 const SIN_SELECCION = 'Seleccionar';
@@ -38,7 +39,8 @@ function Selector({ label, opciones, valor, onChange }) {
 // Encabezado de un pedido nuevo: se precarga con los datos comerciales del cliente (CLIENTE_CIA) y
 // se pueden cambiar con los catálogos descargados en Datos > Cargar datos.
 // onContinuar(encabezado) recibe la selección (la siguiente pantalla se conecta en el contenedor).
-export default function PedidoView({ cliente, ruta, onBack, onContinuar }) {
+// tipo: TIPOS_PEDIDO.pedido o TIPOS_PEDIDO.cotizacion (misma pantalla, cambia el título).
+export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, onBack, onContinuar }) {
   const insets = useSafeAreaInsets();
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -75,7 +77,7 @@ export default function PedidoView({ cliente, ruta, onBack, onContinuar }) {
         setActividadComercial(c.actividadComercial);
       })
       .catch(() => {
-        if (!cancelado) setError('No se pudieron leer los datos del pedido de la base local.');
+        if (!cancelado) setError(`No se pudieron leer los datos ${tipo.del} de la base local.`);
       })
       .finally(() => {
         if (!cancelado) setCargando(false);
@@ -166,7 +168,7 @@ export default function PedidoView({ cliente, ruta, onBack, onContinuar }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Pedido" onBack={onBack} />
+      <CenteredHeader title={tipo.titulo} onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.clientCard}>

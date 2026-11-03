@@ -4,6 +4,21 @@ import { toSqlLocal } from './visitas';
 // Tipo de documento de los subtipos que se ofrecen en el pedido (SUBTIPO_DOC.TIPO).
 const TIPO_FACTURA = 'FAC';
 
+// Documentos que se capturan con las pantallas de pedido. Mismo proceso y mismas tablas
+// (alFAC_ENC_PED + alFAC_DET_PED); solo cambia TIP_DOC: 'F' = pedido, 'C' = cotización.
+// El resto son los textos que muestran las pantallas.
+export const TIPOS_PEDIDO = {
+  pedido: { tipoDoc: 'F', titulo: 'Pedido', nombre: 'pedido', el: 'el pedido', del: 'del pedido', guardado: 'Pedido guardado' },
+  cotizacion: {
+    tipoDoc: 'C',
+    titulo: 'Cotización',
+    nombre: 'cotización',
+    el: 'la cotización',
+    del: 'de la cotización',
+    guardado: 'Cotización guardada',
+  },
+};
+
 // Datos para abrir un pedido: valores del cliente (CLIENTE_CIA, se descargan en Datos > Cargar
 // datos desde /fr/sync/clientesCia) y los catálogos para elegirlos. Cada opción es
 // { codigo, descripcion }; las de región llevan además `pais` (y `division1` las de región 2).
@@ -92,7 +107,7 @@ export function siguienteConsecutivo(actual) {
 // Fecha local a medianoche como texto SQL ('YYYY-MM-DD 00:00:00').
 const soloFecha = (d) => toSqlLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
 
-const COLUMNAS_ENC = [
+export const COLUMNAS_ENC = [
   'COD_CIA', 'COD_ZON', 'COD_CLT', 'NUM_PED', 'COD_BOD', 'LST_PRE', 'COD_CND', 'CLASE', 'COD_PAIS',
   'NUM_ITM', 'DOC_PRO', 'ESTADO', 'TIP_DOC', 'DESCUENTO_CASCADA', 'IMPRESO', 'CONSIGNACION', 'DESC1',
   'DESC2', 'MONT_DESC1', 'MONT_DESC2', 'MON_DSC', 'MON_IMP_VT', 'MON_IMP_CS', 'MON_SIV', 'MON_CIV',
@@ -100,7 +115,7 @@ const COLUMNAS_ENC = [
   'COD_GEO1', 'COD_GEO2', 'ACTIVIDAD_COMERCIAL', 'SUBTIPO_DOC', 'SUBTIPO_DESCRIPCION',
 ];
 
-const COLUMNAS_DET = [
+export const COLUMNAS_DET = [
   'COD_CIA', 'NUM_PED', 'COD_ART', 'NUM_LN', 'CNT_MAX', 'CNT_MIN', 'MON_TOT', 'MON_DSC', 'LST_PRE',
   'MON_PRC_MX', 'MON_PRC_MN', 'POR_DSC_AP', 'ART_BON', 'PORC_IMPUESTO1', 'PORC_IMPUESTO2',
   'PORCENTAJE_IMP1', 'PORCENTAJE_IMP2', 'PORC_EXONERACION', 'MONTO_EXONERACION', 'ES_CANASTA_BASICA',
@@ -119,8 +134,9 @@ const r6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
 //   ruta: código de la ruta del cliente (COD_ZON). bodega: bodega del ERP de la ruta activa.
 //   encabezado: lo de PedidoView. lineas: las agregadas en PedidoArticulosView.
 //   entrega: Date de entrega elegida. fin: Date en que se guarda (HOR_FIN).
-export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas, entrega, fin }) {
-  if (!lineas.length) throw new Error('El pedido no tiene artículos.');
+//   tipoDoc: TIP_DOC ('F' pedido, 'C' cotización; ver TIPOS_PEDIDO). Comparten consecutivo.
+export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas, entrega, fin, tipoDoc = 'F' }) {
+  if (!lineas.length) throw new Error('El documento no tiene artículos.');
   const db = await getDatabase();
   let numero = null;
 
@@ -134,7 +150,7 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       ruta,
       numero,
     ]);
-    if (existe) throw new Error(`Ya existe un pedido con el número ${numero} en la ruta ${ruta}.`);
+    if (existe) throw new Error(`Ya existe un documento con el número ${numero} en la ruta ${ruta}.`);
 
     const suma = (campo) => lineas.reduce((s, l) => s + l[campo], 0);
     const descuento = suma('descuento');
@@ -158,7 +174,7 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       // 'N' = aún no procesado; el backend lo usa en otro proceso (no debe ir null).
       DOC_PRO: 'N',
       ESTADO: 'P',
-      TIP_DOC: 'FAC',
+      TIP_DOC: tipoDoc,
       DESCUENTO_CASCADA: 'N',
       IMPRESO: 'N',
       CONSIGNACION: 'N',
@@ -220,4 +236,62 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
   });
 
   return numero;
+}
+
+// Cotizaciones (TIP_DOC 'C') del cliente en la ruta: las capturadas en el equipo y las descargadas
+// del servidor en Datos > Cargar datos (/fr/sync/cotizaciones). Las más recientes primero.
+export async function getCotizacionesCliente(cliente, ruta) {
+  const db = await getDatabase();
+  const filas = await db.getAllAsync(
+    `SELECT COD_CIA, NUM_PED, FEC_PED, FEC_DES, NUM_ITM, MON_DSC, MON_SIV, MON_IMP_VT, MON_IMP_CS, MON_CIV,
+            MONEDA, ENVIADO
+       FROM alFAC_ENC_PED
+      WHERE COD_CLT = ? AND COD_ZON = ? AND TIP_DOC = 'C'
+      ORDER BY FEC_PED DESC, NUM_PED DESC`,
+    [cliente, ruta]
+  );
+  return filas.map((r) => ({
+    compania: r.COD_CIA,
+    numero: r.NUM_PED,
+    fecha: r.FEC_PED,
+    entrega: r.FEC_DES,
+    articulos: r.NUM_ITM ?? 0,
+    descuento: r.MON_DSC ?? 0,
+    sinIva: r.MON_SIV ?? 0,
+    iva: r.MON_IMP_VT ?? 0,
+    oi: r.MON_IMP_CS ?? 0,
+    total: r.MON_CIV ?? 0,
+    moneda: r.MONEDA,
+    // false = solo está en el equipo (falta Enviar Datos); el PDF se arma en el servidor.
+    enviada: r.ENVIADO === 1,
+  }));
+}
+
+// Aprueba una cotización: pasa a pedido (TIP_DOC 'F') con FEC_PED = día de aprobación y FEC_DES =
+// entrega elegida. Conserva su NUM_PED (no usa consecutivo). Además deja la aprobación pendiente en
+// COTIZACION_APROBACION para el servidor; se manda siempre, aunque la cotización aún no se haya
+// enviado: el servidor procesa pedidos antes que aprobaciones y responde duplicado si ya es 'F'.
+//   ruta: COD_ZON. numero: NUM_PED. entrega: Date elegida. fecha: Date de aprobación.
+export async function aprobarCotizacion({ ruta, numero, entrega, fecha }) {
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    const enc = await db.getFirstAsync('SELECT COD_CIA, TIP_DOC FROM alFAC_ENC_PED WHERE COD_ZON = ? AND NUM_PED = ?', [
+      ruta,
+      numero,
+    ]);
+    if (!enc) throw new Error(`No se encontró la cotización ${numero} en la ruta ${ruta}.`);
+    if (enc.TIP_DOC !== 'C') throw new Error(`El documento ${numero} ya no es una cotización.`);
+
+    const fecPed = soloFecha(fecha);
+    const fecDes = soloFecha(entrega);
+    await db.runAsync(
+      "UPDATE alFAC_ENC_PED SET TIP_DOC = 'F', FEC_PED = ?, FEC_DES = ? WHERE COD_ZON = ? AND NUM_PED = ?",
+      [fecPed, fecDes, ruta, numero]
+    );
+    await db.runAsync(
+      `INSERT OR REPLACE INTO COTIZACION_APROBACION (COD_CIA, COD_ZON, NUM_PED, FEC_PED, FEC_DES, ENVIADO)
+       VALUES (?, ?, ?, ?, ?, 0)`,
+      [enc.COD_CIA, ruta, numero, fecPed, fecDes]
+    );
+  });
 }

@@ -4,7 +4,8 @@ import { toSqlLocal } from '../repositories/visitas';
 import { PATHS, TIMEOUT_ENVIO_MS } from '../config/api';
 
 // Envío al servidor (POST /fr/sync/enviar) de lo registrado en el equipo: ubicaciones de clientes,
-// visitas (con su GPS), pedidos (encabezado + líneas) y el consecutivo de pedidos de cada ruta.
+// visitas (con su GPS), pedidos (encabezado + líneas), aprobaciones de cotizaciones y el consecutivo
+// de pedidos de cada ruta.
 // "Cargar datos" borra las tablas locales y las vuelve a llenar, así que esto va ANTES de cargar.
 // El servidor no duplica: reenviar lo mismo es seguro.
 
@@ -14,16 +15,24 @@ const corta = (v, max) => (v == null ? null : String(v).slice(0, max));
 const fechaSql = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v} 00:00:00` : v ?? null);
 const numero = (v) => (v == null || v === '' ? null : Number(v));
 
-// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, consecutivos, total }).
+// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, consecutivos, total }).
 export async function contarPendientes() {
   const db = await getDatabase();
   const cuenta = async (tabla) => (await db.getFirstAsync(`SELECT COUNT(*) AS n FROM ${tabla} WHERE ENVIADO = 0`))?.n ?? 0;
   const ubicaciones = await cuenta('CLIENTE_UBICACION');
   const visitas = await cuenta('VISITA');
   const pedidos = await cuenta('alFAC_ENC_PED');
+  const aprobaciones = await cuenta('COTIZACION_APROBACION');
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos = flag?.value === '1' ? 1 : 0;
-  return { ubicaciones, visitas, pedidos, consecutivos, total: ubicaciones + visitas + pedidos + consecutivos };
+  return {
+    ubicaciones,
+    visitas,
+    pedidos,
+    aprobaciones,
+    consecutivos,
+    total: ubicaciones + visitas + pedidos + aprobaciones + consecutivos,
+  };
 }
 
 async function leerPendientes(db) {
@@ -79,6 +88,8 @@ async function leerPendientes(db) {
         // El backend lo usa en otro proceso: nunca null (pedidos guardados antes del cambio).
         DOC_PRO: e.DOC_PRO ?? 'N',
         ESTADO: e.ESTADO,
+        // 'C' = cotización; el resto es pedido 'F' (los guardados antes del cambio tienen 'FAC').
+        TIP_DOC: e.TIP_DOC === 'C' ? 'C' : 'F',
         DESCUENTO_CASCADA: e.DESCUENTO_CASCADA,
         IMPRESO: e.IMPRESO,
         CONSIGNACION: e.CONSIGNACION,
@@ -128,6 +139,19 @@ async function leerPendientes(db) {
     });
   }
 
+  // Cotizaciones aprobadas en el equipo (TIP_DOC 'C' -> 'F'). El servidor las procesa después de
+  // los pedidos, así que también sirven para una cotización que se envía en este mismo request.
+  const filasAprobacion = await db.getAllAsync(
+    'SELECT COD_CIA, COD_ZON, NUM_PED, FEC_PED, FEC_DES FROM COTIZACION_APROBACION WHERE ENVIADO = 0'
+  );
+  const aprobaciones = filasAprobacion.map((a) => ({
+    COD_CIA: a.COD_CIA,
+    COD_ZON: a.COD_ZON,
+    NUM_PED: a.NUM_PED,
+    FEC_PED: fechaSql(a.FEC_PED),
+    FEC_DES: fechaSql(a.FEC_DES),
+  }));
+
   // Consecutivo SIGUIENTE de cada ruta (ya incrementado en el equipo). Solo si se guardaron pedidos
   // desde el último envío correcto.
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
@@ -136,7 +160,7 @@ async function leerPendientes(db) {
       ? await db.getAllAsync("SELECT RUTA, PEDIDO FROM RUTA_CONSECUT_RT WHERE COALESCE(PEDIDO, '') <> ''")
       : [];
 
-  return { ubicaciones, visitas, pedidos, consecutivos };
+  return { ubicaciones, visitas, pedidos, aprobaciones, consecutivos };
 }
 
 // Envía todo lo pendiente y marca como enviado lo que el servidor guardó (ok, o duplicado de un envío
@@ -146,12 +170,17 @@ async function leerPendientes(db) {
 export async function enviarPendientes() {
   const db = await getDatabase();
   const datos = await leerPendientes(db);
-  const total = datos.ubicaciones.length + datos.visitas.length + datos.pedidos.length + datos.consecutivos.length;
+  const total =
+    datos.ubicaciones.length +
+    datos.visitas.length +
+    datos.pedidos.length +
+    datos.aprobaciones.length +
+    datos.consecutivos.length;
   if (!total) return { enviados: 0, errores: [] };
 
   const json = await postJson(PATHS.syncEnviar, datos, { timeout: TIMEOUT_ENVIO_MS });
   const r = json?.result;
-  if (!r || !['ubicaciones', 'visitas', 'pedidos', 'consecutivos'].every((k) => Array.isArray(r[k]))) {
+  if (!r || !['ubicaciones', 'visitas', 'pedidos', 'aprobaciones', 'consecutivos'].every((k) => Array.isArray(r[k]))) {
     throw new ApiError('La respuesta del servidor al envío no tiene el formato esperado.');
   }
 
@@ -200,6 +229,13 @@ export async function enviarPendientes() {
       (p) => `${p.encabezado.NUM_PED} (cliente ${p.encabezado.COD_CLT})`,
       marcarEn('alFAC_ENC_PED', 'COD_ZON = ? AND NUM_PED = ?', (p) => [p.encabezado.COD_ZON, p.encabezado.NUM_PED])
     );
+    await procesar(
+      'Aprobación',
+      datos.aprobaciones,
+      r.aprobaciones,
+      (a) => `Cotización ${a.NUM_PED}`,
+      marcarEn('COTIZACION_APROBACION', 'COD_ZON = ? AND NUM_PED = ?', (a) => [a.COD_ZON, a.NUM_PED])
+    );
     let consecutivosOk = true;
     await procesar(
       'Consecutivo',
@@ -216,4 +252,28 @@ export async function enviarPendientes() {
   });
 
   return { enviados, errores };
+}
+
+// Borra del equipo lo que ya está en el servidor, como parte de "Cargar datos" (solo se llama cuando
+// no queda nada pendiente): pedidos y cotizaciones enviados (encabezado + líneas; las cotizaciones
+// se vuelven a descargar), aprobaciones enviadas y visitas enviadas de días
+// anteriores con su GPS. Las visitas de hoy se conservan porque marcan a los clientes como
+// visitados en la tabla de Validar. Corre dentro de la transacción de la carga (db la da DatosScreen).
+export async function limpiarEnviados(db) {
+  // alFAC_DET_PED no tiene COD_ZON: no se borran líneas de un NUM_PED que siga pendiente en otra ruta.
+  await db.runAsync(
+    `DELETE FROM alFAC_DET_PED
+      WHERE NUM_PED IN (SELECT NUM_PED FROM alFAC_ENC_PED WHERE ENVIADO = 1)
+        AND NUM_PED NOT IN (SELECT NUM_PED FROM alFAC_ENC_PED WHERE ENVIADO = 0)`
+  );
+  await db.runAsync('DELETE FROM alFAC_ENC_PED WHERE ENVIADO = 1');
+  await db.runAsync('DELETE FROM COTIZACION_APROBACION WHERE ENVIADO = 1');
+  await db.runAsync("DELETE FROM VISITA WHERE ENVIADO = 1 AND date(INICIO) < date('now', 'localtime')");
+  await db.runAsync(
+    `DELETE FROM VISITA_UBICACION
+      WHERE NOT EXISTS (SELECT 1 FROM VISITA v
+                         WHERE v.CLIENTE = VISITA_UBICACION.CLIENTE
+                           AND v.RUTA = VISITA_UBICACION.RUTA
+                           AND v.INICIO = VISITA_UBICACION.INICIO)`
+  );
 }

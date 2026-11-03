@@ -16,10 +16,12 @@ import ConsultaDocumentosView from './ConsultaDocumentosView';
 import ConsultaClienteView from './ConsultaClienteView';
 import PedidoView from './PedidoView';
 import PedidoArticulosView from './PedidoArticulosView';
+import CotizacionesView from './CotizacionesView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
 import { getDocumentosCobro } from '../../repositories/cobros';
+import { TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { colors } from '../../theme';
 
 // Estado de visita (EFECT_VISITA_RT) con que se registra la visita al guardar un pedido.
@@ -49,12 +51,14 @@ export default function ClientesScreen({ onBack }) {
   const [registro, setRegistro] = useState(null);
   // Último cliente seleccionado en la tabla ({ cliente, ruta }).
   const [seleccion, setSeleccion] = useState(null);
-  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'consultar'); null = menú de opciones.
+  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'cotizacion' | 'consultar'); null = menú.
   const [opcionActiva, setOpcionActiva] = useState(null);
   // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
   const [cobro, setCobro] = useState(null);
-  // Encabezado del pedido en curso tras continuar desde Pedido; abre la tabla de artículos.
+  // Encabezado del pedido (o cotización) en curso tras continuar desde Pedido; abre la tabla de artículos.
   const [pedido, setPedido] = useState(null);
+  // En Cotización: true = captura de una nueva; false = lista de cotizaciones del cliente.
+  const [nuevaCotizacion, setNuevaCotizacion] = useState(false);
   // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'documentos'); null = menú.
   const [consulta, setConsulta] = useState(null);
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
@@ -138,12 +142,19 @@ export default function ClientesScreen({ onBack }) {
     }
   };
 
-  // Al guardar un pedido la visita se registra sola como "Visita Efectiva" (tipo Real), con el
-  // inicio de Validar, y se vuelve al menú del cliente. Al salir de Validar ya no se pregunta.
+  // Al guardar un pedido (o cotización) la visita se registra sola como "Visita Efectiva" (tipo Real),
+  // con el inicio de Validar, y se vuelve al menú del cliente. Al salir de Validar ya no se pregunta.
   const handlePedidoGuardado = async (numero) => {
+    const tipo = TIPOS_PEDIDO[opcionActiva];
     setPedido(null);
+    setNuevaCotizacion(false);
     setOpcionActiva(null);
-    if (validando.visitaRegistrada) return; // otro pedido en la misma visita: ya quedó registrada
+    await registrarVisitaEfectiva(`${tipo.titulo} ${numero}`);
+  };
+
+  // Registra la visita efectiva de la validación en curso (una sola vez por visita).
+  const registrarVisitaEfectiva = async (notas) => {
+    if (validando.visitaRegistrada) return; // otro documento en la misma visita: ya quedó registrada
     try {
       // Ubicación de la visita: las coordenadas del cliente (Validar > Ubicación > Asignar coordenadas).
       const ubicacion = await getUbicacionCliente(validando.ruta, validando.cliente.codigo);
@@ -154,7 +165,7 @@ export default function ClientesScreen({ onBack }) {
         fin: new Date(),
         tipo: 'R',
         razon: ESTADO_VISITA_EFECTIVA,
-        notas: `Pedido ${numero}`,
+        notas,
         ubicacion,
       });
       setValidando((v) => (v ? { ...v, visitaRegistrada: true } : v));
@@ -244,24 +255,40 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
-  if (validando && opcionActiva === 'pedido' && pedido) {
+  // Pedido y Cotización usan las mismas pantallas de captura; solo cambia el tipo (TIP_DOC 'F' o 'C').
+  // Cotización abre primero la lista del cliente (aprobar o crear una nueva).
+  if (validando && TIPOS_PEDIDO[opcionActiva] && pedido) {
     return (
       <PedidoArticulosView
         cliente={validando.cliente}
         ruta={validando.ruta}
         encabezado={pedido}
+        tipo={TIPOS_PEDIDO[opcionActiva]}
         onBack={() => setPedido(null)}
         onGuardado={handlePedidoGuardado}
       />
     );
   }
 
-  if (validando && opcionActiva === 'pedido') {
+  if (validando && opcionActiva === 'cotizacion' && !nuevaCotizacion) {
+    return (
+      <CotizacionesView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onNueva={() => setNuevaCotizacion(true)}
+        onAprobada={(numero) => registrarVisitaEfectiva(`Pedido ${numero} (cotización aprobada)`)}
+      />
+    );
+  }
+
+  if (validando && TIPOS_PEDIDO[opcionActiva]) {
     return (
       <PedidoView
         cliente={validando.cliente}
         ruta={validando.ruta}
-        onBack={() => setOpcionActiva(null)}
+        tipo={TIPOS_PEDIDO[opcionActiva]}
+        onBack={() => (opcionActiva === 'cotizacion' ? setNuevaCotizacion(false) : setOpcionActiva(null))}
         onContinuar={setPedido}
       />
     );
@@ -313,7 +340,10 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={handleSalirValidar}
         onOpcion={(opcion) => {
-          if (['cobros', 'pedido', 'consultar'].includes(opcion.id)) setOpcionActiva(opcion.id);
+          if (['cobros', 'pedido', 'cotizacion', 'consultar'].includes(opcion.id)) {
+            setNuevaCotizacion(false);
+            setOpcionActiva(opcion.id);
+          }
           else Alert.alert(opcion.title, 'Próximamente.');
         }}
       />

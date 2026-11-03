@@ -1,5 +1,4 @@
 import { getJson, ApiError } from './api';
-import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
 
 // Del servidor llegan campos de SQL Server (a veces con espacios al final): se limpian.
@@ -7,9 +6,10 @@ const text = (v) => (v === null || v === undefined ? null : String(v).trim());
 const textOr = (v, fallback = '') => text(v) ?? fallback;
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
-// Descarga rutas (grupo y bodegas), artículos, existencias, precios e impuestos y los guarda en SQLite en UNA transacción:
-// o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
-export async function syncArticulos() {
+// Descarga rutas (grupo y bodegas), artículos, existencias, precios e impuestos.
+// Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama
+// guardar dentro de UNA transacción con el resto de la carga (o se guarda todo o no se toca nada).
+export async function descargarArticulos() {
   const json = await getJson(PATHS.syncArticulos);
   const data = json?.result;
   if (!data || !Array.isArray(data.articulos) || !Array.isArray(data.existencias)) {
@@ -39,8 +39,7 @@ export async function syncArticulos() {
     (traePrecios ? data.precios.length - precios.length : 0) +
     (traeImpuestos ? data.impuestos.length - impuestos.length : 0);
 
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
+  const guardar = async (db) => {
     // Los maestros se reemplazan completos con lo que manda el servidor.
     await db.runAsync('DELETE FROM ARTICULO');
     await db.runAsync('DELETE FROM ARTICULO_EXISTENCIA');
@@ -168,13 +167,14 @@ export async function syncArticulos() {
       "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_articulos_at', ?)",
       [new Date().toISOString()]
     );
-  });
+  };
 
-  return {
+  const resumen = {
     rutas: rutas.length,
     articulos: articulos.length,
     existencias: existencias.length,
     precios: precios.length,
     omitidos,
   };
+  return { guardar, resumen };
 }

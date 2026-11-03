@@ -7,10 +7,19 @@ import { PATHS } from '../config/api';
 // Descarga del backend el PDF del documento (DTE) y abre el menú del sistema para guardarlo
 // (Archivos, Drive...) o compartirlo; desde ahí el usuario lo imprime con su celular.
 // numero: número del documento tal como lo identifica el backend (NUM_DOC).
-export async function descargarDocumentoPdf(numero) {
-  const bytes = await getArchivo(PATHS.dtePdf(numero));
+export function descargarDocumentoPdf(numero) {
+  return descargarPdf(PATHS.dtePdf(numero), numero, `Documento ${numero}`);
+}
 
-  const archivo = new File(Paths.cache, `${nombreArchivo(numero)}.pdf`);
+// Igual, para una cotización ya enviada al servidor (llave COD_CIA + NUM_PED).
+export function descargarCotizacionPdf(cia, numero) {
+  return descargarPdf(PATHS.cotizacionPdf(cia, numero), `Cotizacion_${numero}`, `Cotización ${numero}`);
+}
+
+async function descargarPdf(path, nombre, titulo) {
+  const bytes = await getArchivo(path);
+
+  const archivo = new File(Paths.cache, `${nombreArchivo(nombre)}.pdf`);
   if (archivo.exists) archivo.delete();
   archivo.create();
   archivo.write(bytes);
@@ -21,7 +30,7 @@ export async function descargarDocumentoPdf(numero) {
   await Sharing.shareAsync(archivo.uri, {
     mimeType: 'application/pdf',
     UTI: 'com.adobe.pdf',
-    dialogTitle: `Documento ${numero}`,
+    dialogTitle: titulo,
   });
 }
 

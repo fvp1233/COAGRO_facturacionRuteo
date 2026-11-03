@@ -21,6 +21,12 @@ export const OPCIONES_CLIENTE = [
     palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
+    id: 'cotizacion',
+    title: 'Cotización',
+    icon: 'file-document-edit-outline',
+    palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
+  },
+  {
     id: 'devolucion',
     title: 'Devolución',
     icon: 'clipboard-arrow-left',

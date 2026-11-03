@@ -1,5 +1,4 @@
 import { getJson, ApiError } from './api';
-import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
 
 // Del servidor llegan campos de SQL Server (a veces con espacios al final): se limpian.
@@ -7,20 +6,21 @@ const text = (v) => (v === null || v === undefined ? null : String(v).trim());
 const textOr = (v, fallback = '') => text(v) ?? fallback;
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
-// Descarga los documentos pendientes de cobro (alCXC_PEN_COB) y los guarda en SQLite en UNA
-// transacción: o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
-export function syncCobros() {
-  return descargarCobros(PATHS.syncCobros, 'alCXC_PEN_COB', 'sync_cobros_at');
+// Descarga los documentos pendientes de cobro (alCXC_PEN_COB).
+// Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama
+// guardar dentro de UNA transacción con el resto de la carga (o se guarda todo o no se toca nada).
+export function descargarCobros() {
+  return descargarDocumentos(PATHS.syncCobros, 'alCXC_PEN_COB', 'sync_cobros_at');
 }
 
-// Igual que syncCobros, pero solo los documentos que le toca cobrar al agente (vendedor) del
+// Igual que descargarCobros, pero solo los documentos que le toca cobrar al agente (vendedor) del
 // token; se guardan aparte en alCXC_PEN_COB_AGENTE (Calendario > Mis documentos vencidos).
-export function syncCobrosAgente() {
-  return descargarCobros(PATHS.syncCobrosAgente, 'alCXC_PEN_COB_AGENTE', 'sync_cobros_agente_at');
+export function descargarCobrosAgente() {
+  return descargarDocumentos(PATHS.syncCobrosAgente, 'alCXC_PEN_COB_AGENTE', 'sync_cobros_agente_at');
 }
 
 // tabla y metaKey son constantes de este archivo (no vienen del usuario).
-async function descargarCobros(path, tabla, metaKey) {
+async function descargarDocumentos(path, tabla, metaKey) {
   const json = await getJson(path);
   const data = json?.result;
   if (!data || !Array.isArray(data.documentos)) {
@@ -34,8 +34,7 @@ async function descargarCobros(path, tabla, metaKey) {
   );
   const omitidos = data.documentos.length - documentos.length;
 
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
+  const guardar = async (db) => {
     // Los pendientes se reemplazan completos con lo que manda el servidor.
     await db.runAsync(`DELETE FROM ${tabla}`);
 
@@ -83,10 +82,11 @@ async function descargarCobros(path, tabla, metaKey) {
       'INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)',
       [metaKey, new Date().toISOString()]
     );
-  });
+  };
 
-  return {
+  const resumen = {
     documentos: documentos.length,
     omitidos,
   };
+  return { guardar, resumen };
 }

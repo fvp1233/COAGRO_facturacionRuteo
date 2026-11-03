@@ -3,13 +3,15 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
-import { syncClientes } from '../services/syncClientes';
-import { syncClientesCia } from '../services/syncClientesCia';
-import { syncArticulos } from '../services/syncArticulos';
-import { syncCobros, syncCobrosAgente } from '../services/syncCobros';
-import { syncConsecutivos } from '../services/syncConsecutivos';
+import { descargarClientes } from '../services/syncClientes';
+import { descargarClientesCia } from '../services/syncClientesCia';
+import { descargarArticulos } from '../services/syncArticulos';
+import { descargarCobros, descargarCobrosAgente } from '../services/syncCobros';
+import { descargarConsecutivos } from '../services/syncConsecutivos';
+import { descargarCotizaciones } from '../services/syncCotizaciones';
+import { getDatabase } from '../db/database';
 import { refrescarSesion } from '../services/mobileAuth';
-import { contarPendientes, enviarPendientes } from '../services/enviarDatos';
+import { contarPendientes, enviarPendientes, limpiarEnviados } from '../services/enviarDatos';
 import { isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
@@ -33,9 +35,12 @@ function formatFecha(iso) {
 }
 
 // Sincronización de datos.
-// - "Enviar Datos" sube lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
-// - "Cargar datos" primero envía lo pendiente y SOLO si todo quedó en el servidor borra las tablas
-//   locales y las vuelve a llenar con las del sistema en línea (si no, lo pendiente se perdería).
+// - "Enviar Datos" sube lo registrado en el equipo (ubicaciones, visitas, pedidos, aprobaciones de
+//   cotizaciones y consecutivos).
+// - "Cargar datos" primero envía lo pendiente y SOLO si ya no queda nada por enviar borra lo enviado
+//   (pedidos y visitas anteriores) y vuelve a llenar las tablas con las del sistema en línea (si no,
+//   lo pendiente se perdería). Primero descarga TODO a memoria y después lo guarda en UNA
+//   transacción: si se corta la red o falla una descarga, la base queda como estaba.
 export default function DatosScreen({ module, onBack }) {
   const insets = useSafeAreaInsets();
   const [ultima, setUltima] = useState(null);
@@ -118,13 +123,32 @@ export default function DatosScreen({ module, onBack }) {
         );
         return;
       }
-      // Cuando haya más tablas, se llaman aquí una tras otra.
-      const clientes = await syncClientes();
-      const clientesCia = await syncClientesCia();
-      const articulos = await syncArticulos();
-      const cobros = await syncCobros();
-      const cobrosAgente = await syncCobrosAgente();
-      const consecutivos = await syncConsecutivos();
+      // Se vuelve a contar en la base: nada se borra si quedó algo sin marcar como enviado.
+      const { total: quedan } = await contarPendientes();
+      if (quedan) {
+        setError(
+          `No se cargaron los datos: quedan ${quedan} ${quedan === 1 ? 'registro pendiente' : 'registros pendientes'} de enviar. Usa Enviar Datos y vuelve a intentar.`
+        );
+        return;
+      }
+      // Cuando haya más tablas, se descargan aquí una tras otra. Nada se escribe todavía.
+      const descargas = {
+        clientes: await descargarClientes(),
+        clientesCia: await descargarClientesCia(),
+        articulos: await descargarArticulos(),
+        cobros: await descargarCobros(),
+        cobrosAgente: await descargarCobrosAgente(),
+        consecutivos: await descargarConsecutivos(),
+        cotizaciones: await descargarCotizaciones(),
+      };
+      const db = await getDatabase();
+      await db.withTransactionAsync(async () => {
+        await limpiarEnviados(db);
+        for (const d of Object.values(descargas)) await d.guardar(db);
+      });
+      const { clientes, clientesCia, articulos, cobros, cobrosAgente, consecutivos, cotizaciones } = Object.fromEntries(
+        Object.entries(descargas).map(([k, d]) => [k, d.resumen])
+      );
       setResumen({
         ...clientes,
         clientesCia: clientesCia.clientesCia,
@@ -133,12 +157,20 @@ export default function DatosScreen({ module, onBack }) {
         documentos: cobros.documentos,
         documentosAgente: cobrosAgente.documentos,
         consecutivos: consecutivos.consecutivos,
-        omitidos: clientes.omitidos + clientesCia.omitidos + articulos.omitidos + cobros.omitidos + cobrosAgente.omitidos + consecutivos.omitidos,
+        cotizaciones: cotizaciones.cotizaciones,
+        omitidos:
+          clientes.omitidos +
+          clientesCia.omitidos +
+          articulos.omitidos +
+          cobros.omitidos +
+          cobrosAgente.omitidos +
+          consecutivos.omitidos +
+          cotizaciones.omitidos,
       });
     } catch (e) {
       mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
     } finally {
-      // Aunque falle una tabla, las que sí se guardaron se reflejan en los contadores.
+      // Si algo falló, la transacción no guardó nada: los contadores siguen mostrando lo anterior.
       await refrescar();
       setAccion(null);
     }
@@ -211,7 +243,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>

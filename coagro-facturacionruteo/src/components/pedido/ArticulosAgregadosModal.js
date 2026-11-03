@@ -4,13 +4,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CenteredHeader from '../ui/CenteredHeader';
 import DataTable from '../ui/DataTable';
+import { TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { colors, spacing } from '../../theme';
 
 // Pestaña con los artículos agregados al pedido (con + en Artículos del pedido).
 // lineas: [{ codigo, descripcion, cantidadTexto (ej. "1 BARRIL + 100 LT"), total, moneda }].
 // formatMonto(n, moneda) da el texto del monto.
-// onEliminar(codigo) quita la línea; total = suma de las líneas.
-export default function ArticulosAgregadosModal({ visible, lineas, total, formatMonto, onEliminar, onClose }) {
+// onEliminar(codigo) quita la línea; total = suma de las líneas. tipo: TIPOS_PEDIDO (textos).
+export default function ArticulosAgregadosModal({
+  visible,
+  lineas,
+  total,
+  tipo = TIPOS_PEDIDO.pedido,
+  formatMonto,
+  onEliminar,
+  onClose,
+}) {
   const insets = useSafeAreaInsets();
   const moneda = lineas[0]?.moneda;
 
@@ -57,7 +66,7 @@ export default function ArticulosAgregadosModal({ visible, lineas, total, format
         </ScrollView>
         <View style={styles.bar}>
           <Text style={styles.barLabel}>
-            Total del pedido · {lineas.length} {lineas.length === 1 ? 'artículo' : 'artículos'}
+            Total {tipo.del} · {lineas.length} {lineas.length === 1 ? 'artículo' : 'artículos'}
           </Text>
           <Text style={styles.barTotal}>{formatMonto(total, moneda)}</Text>
         </View>

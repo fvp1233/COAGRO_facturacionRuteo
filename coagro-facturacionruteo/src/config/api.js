@@ -19,6 +19,10 @@ export const PATHS = {
   sesion: '/fr/mobile/sesion',
   // PDF de un DTE generado por el backend: /fr/mobile/dte/<numero>/pdf
   dtePdf: (numero) => `/fr/mobile/dte/${encodeURIComponent(numero)}/pdf`,
+  // PDF de una cotización (o pedido) de alFAC_ENC_PED: /fr/mobile/cotizacion/<cia>/<pedido>/pdf.
+  // Se arma con los datos del servidor: la cotización tiene que estar enviada.
+  cotizacionPdf: (cia, pedido) =>
+    `/fr/mobile/cotizacion/${encodeURIComponent(cia)}/${encodeURIComponent(pedido)}/pdf`,
   syncClientes: '/fr/sync/clientes',
   syncClientesCia: '/fr/sync/clientesCia',
   syncArticulos: '/fr/sync/articulos',
@@ -26,6 +30,8 @@ export const PATHS = {
   // Pendientes de cobro solo del agente (vendedor) del token.
   syncCobrosAgente: '/fr/sync/cobrosAgente',
   syncConsecutivos: '/fr/sync/consecutivos',
+  // Cotizaciones (TIP_DOC 'C') de las rutas de la handheld, para aprobarlas desde la app.
+  syncCotizaciones: '/fr/sync/cotizaciones',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

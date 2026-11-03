@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CenteredHeader from '../ui/CenteredHeader';
 import SelectField from '../ui/SelectField';
+import { TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
@@ -19,7 +20,8 @@ const fecha = (d) => d.toLocaleDateString('es', { day: '2-digit', month: '2-digi
 const hora = (d) => d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
 
 // Opciones de entrega: "Hoy - 22/10/2026", "Mañana - 23/10/2026", "vie 24/10/2026"...
-function opcionesEntrega(desde) {
+// También las usa la aprobación de cotizaciones (AprobarCotizacionModal).
+export function opcionesEntrega(desde) {
   return Array.from({ length: DIAS_ENTREGA }, (_, i) => {
     const d = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + i);
     const dia = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : d.toLocaleDateString('es', { weekday: 'short' });
@@ -42,7 +44,17 @@ function Dato({ label, value, destacado = false }) {
 // La fecha de entrega la elige el vendedor (desde hoy); por defecto es hoy.
 // lineas: [{ subtotal, descuento, iva, oi, moneda }]. formatMonto(n, moneda) da el texto del monto.
 // onGuardar(entrega: Date) -> Promise: guarda el pedido; mientras tanto el botón queda deshabilitado.
-export default function PedidoResumenModal({ visible, cliente, encabezado, lineas, formatMonto, onGuardar, onClose }) {
+// tipo: TIPOS_PEDIDO.pedido o .cotizacion (textos).
+export default function PedidoResumenModal({
+  visible,
+  cliente,
+  encabezado,
+  tipo = TIPOS_PEDIDO.pedido,
+  lineas,
+  formatMonto,
+  onGuardar,
+  onClose,
+}) {
   const insets = useSafeAreaInsets();
   const [guardando, setGuardando] = useState(false);
   // Fecha y hora en que se abre el resumen.
@@ -66,7 +78,7 @@ export default function PedidoResumenModal({ visible, cliente, encabezado, linea
 
   const confirmarGuardar = () => {
     if (guardando) return;
-    Alert.alert('Guardar pedido', `¿Guardar el pedido por ${m(neto)}?`, [
+    Alert.alert(`Guardar ${tipo.nombre}`, `¿Guardar ${tipo.el} por ${m(neto)}?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Guardar',
@@ -85,7 +97,7 @@ export default function PedidoResumenModal({ visible, cliente, encabezado, linea
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <CenteredHeader title="Resumen del pedido" onBack={onClose} />
+        <CenteredHeader title={`Resumen ${tipo.del}`} onBack={onClose} />
 
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.info} numberOfLines={1}>
@@ -131,7 +143,7 @@ export default function PedidoResumenModal({ visible, cliente, encabezado, linea
             ) : (
               <Feather name="save" size={20} color={colors.onPrimary} />
             )}
-            <Text style={styles.actionText}>{guardando ? 'Guardando...' : 'Guardar pedido'}</Text>
+            <Text style={styles.actionText}>{guardando ? 'Guardando...' : `Guardar ${tipo.nombre}`}</Text>
           </Pressable>
         </View>
       </View>

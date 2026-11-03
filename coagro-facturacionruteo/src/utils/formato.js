@@ -8,6 +8,12 @@ export const formatMonto = (n) => {
   return valor < 0 ? `-$${texto}` : `$${texto}`;
 };
 
+// Monto en la moneda del precio: 'D' en dólares ($); otra moneda lleva su código delante.
+export const formatMontoMoneda = (n, moneda) =>
+  moneda === 'D'
+    ? formatMonto(n)
+    : `${moneda ?? ''} ${Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
+
 // Cantidades con hasta 2 decimales (sin ceros sobrantes), mismo separador que los montos:
 // 1234 -> "1,234", 2.5 -> "2.5".
 export const formatCantidad = (n) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 });

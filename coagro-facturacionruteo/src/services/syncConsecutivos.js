@@ -1,5 +1,4 @@
 import { getJson, ApiError } from './api';
-import { getDatabase } from '../db/database';
 import { PATHS } from '../config/api';
 
 // Del servidor llegan campos de SQL Server (a veces con espacios al final): se limpian.
@@ -31,9 +30,10 @@ const valor = (fila, col) => {
   return col.endsWith('_SEC') ? num(fila[col]) : text(fila[col]);
 };
 
-// Descarga los consecutivos de las rutas de la handheld (RUTA_CONSECUT_RT) y los guarda en SQLite
-// en UNA transacción: o se guarda todo o no se toca nada. Devuelve un resumen con los conteos.
-export async function syncConsecutivos() {
+// Descarga los consecutivos de las rutas de la handheld (RUTA_CONSECUT_RT).
+// Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama
+// guardar dentro de UNA transacción con el resto de la carga (o se guarda todo o no se toca nada).
+export async function descargarConsecutivos() {
   const json = await getJson(PATHS.syncConsecutivos);
   const data = json?.result;
   if (!data || !Array.isArray(data.consecutivos)) {
@@ -48,8 +48,7 @@ export async function syncConsecutivos() {
   const sql = `INSERT OR REPLACE INTO RUTA_CONSECUT_RT (${COLUMNAS.join(', ')})
      VALUES (${COLUMNAS.map(() => '?').join(', ')})`;
 
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
+  const guardar = async (db) => {
     // Los consecutivos se reemplazan completos con lo que manda el servidor.
     await db.runAsync('DELETE FROM RUTA_CONSECUT_RT');
 
@@ -61,10 +60,11 @@ export async function syncConsecutivos() {
       "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_consecutivos_at', ?)",
       [new Date().toISOString()]
     );
-  });
+  };
 
-  return {
+  const resumen = {
     consecutivos: consecutivos.length,
     omitidos,
   };
+  return { guardar, resumen };
 }
