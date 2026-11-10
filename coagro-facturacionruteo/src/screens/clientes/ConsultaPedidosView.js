@@ -48,8 +48,9 @@ function FacturasDelPedido({ facturas }) {
 }
 
 // Menú Consultar > Pedidos: historial de PEDIDOS del ERP del cliente en las rutas de la handheld
-// (/fr/sync/historialPedidos). Al abrir se pide al servidor (requiere internet) y se guarda como
-// caché del cliente; sin red se muestra la última caché con su fecha. Al seleccionar un pedido se
+// (se descarga en Datos > Cargar datos). Al abrir se muestra lo guardado en el equipo; Actualizar
+// (o un cliente sin nada guardado) consulta /fr/sync/historialPedidos y reemplaza su caché; sin red
+// se muestra la última caché con su fecha. Al seleccionar un pedido se
 // muestran abajo dos pestañas: Detalle (líneas) y Montos. Las facturas tienen su propia vista
 // (Menú Consultar > Documentos); aquí solo se muestran sus números.
 // Pedido todo facturado (montos null): la pestaña Montos muestra los montos de sus facturas
@@ -107,9 +108,15 @@ export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
     }
   }, [cliente.codigo, mostrarCache]);
 
+  // Al abrir se muestra lo guardado en el equipo (Cargar datos); solo se consulta en línea si este
+  // cliente no tiene nada guardado. El botón Actualizar consulta en línea cuando se quiera.
   useEffect(() => {
-    consultar();
-  }, [consultar]);
+    mostrarCache()
+      .then((cache) => {
+        if (!cache.descargado) consultar();
+      })
+      .catch(() => consultar());
+  }, [mostrarCache, consultar]);
 
   const filtrados = useMemo(() => {
     const q = normalizar(texto);

@@ -266,7 +266,7 @@ export default function PedidoArticulosView({
 
   // Inserta el pedido en la base local (alFAC_ENC_PED + alFAC_DET_PED) con la bodega del ERP de la
   // ruta activa. Si se guarda, avisa con el número y vuelve al menú del cliente.
-  const guardar = async (entrega) => {
+  const guardar = async (entrega, notas) => {
     try {
       const activa = await getRutaActiva();
       const numero = await guardarPedido({
@@ -276,6 +276,7 @@ export default function PedidoArticulosView({
         encabezado,
         lineas: agregados,
         entrega,
+        notas,
         fin: new Date(),
         tipoDoc: tipo.tipoDoc,
       });

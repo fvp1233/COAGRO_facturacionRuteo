@@ -21,6 +21,7 @@ import {
 import { getHistorialCliente, getLineasFactura } from '../../repositories/historialFacturas';
 import { actualizarHistorialCliente } from '../../services/historialFacturas';
 import { isNetworkError } from '../../services/api';
+import { formatVendedor } from '../../utils/formato';
 import { normalizar } from '../../utils/text';
 import { colors } from '../../theme';
 
@@ -30,8 +31,9 @@ const SEARCH_MODES = [
 ];
 
 // Menú Consultar > Documentos: historial de FACTURAS del ERP del cliente en las rutas de la handheld
-// (/fr/sync/historialFacturas). Al abrir se pide al servidor (requiere
-// internet) y se guarda como caché del cliente; sin red se muestra la última caché con su fecha.
+// (se descarga en Datos > Cargar datos). Al abrir se muestra lo guardado en el equipo; Actualizar
+// (o un cliente sin nada guardado) consulta /fr/sync/historialFacturas y reemplaza su caché; sin red
+// se muestra la última caché con su fecha.
 // Al seleccionar una factura se muestran abajo dos pestañas: Detalle (líneas) y Montos. Las anuladas
 // llevan el distintivo ANULADA en la lista y en el detalle.
 // facturaInicial ({ compania, numero }): abre directo el detalle de esa factura. Si ya está en la
@@ -94,8 +96,14 @@ export default function ConsultaFacturasView({ cliente, ruta, facturaInicial = n
   }, [cliente.codigo, mostrarCache]);
 
   useEffect(() => {
+    // Al abrir se muestra lo guardado en el equipo (Cargar datos); solo se consulta en línea si este
+    // cliente no tiene nada guardado. El botón Actualizar consulta en línea cuando se quiera.
     if (!facturaInicial) {
-      consultar();
+      mostrarCache()
+        .then((cache) => {
+          if (!cache.descargado) consultar();
+        })
+        .catch(() => consultar());
       return;
     }
     // Abrir directo una factura: la lista queda filtrada por su número y se selecciona.
@@ -219,6 +227,7 @@ export default function ConsultaFacturasView({ cliente, ruta, facturaInicial = n
               <Dato label="Pedido de origen" value={factura.pedido} />
               <Dato label="Fecha y hora" value={formatFechaHora(factura.fecha)} />
               <Dato label="Condición de pago" value={factura.condicionPago} />
+              <Dato label="Vendedor" value={formatVendedor(factura)} />
               {factura.ruta ? <Dato label="Ruta" value={factura.ruta} /> : null}
             </EncabezadoDocumento>
 

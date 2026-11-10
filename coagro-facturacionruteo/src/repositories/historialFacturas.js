@@ -1,15 +1,20 @@
 import { getDatabase } from '../db/database';
 
-// Historial de facturas del cliente guardado en el equipo (caché de la última consulta en línea,
-// services/historialFacturas), en el orden en que llegó: fecha descendente.
-// Devuelve { facturas, descargado } — descargado: ISO de la última consulta exitosa; null si nunca
-// se consultó (sin caché). Los montos llegan calculados del servidor: no se recalculan.
+// Historial de facturas del cliente guardado en el equipo (Cargar datos o la última consulta en
+// línea, services/historialFacturas), en el orden en que llegó: fecha descendente.
+// Devuelve { facturas, descargado } — descargado: ISO de la última descarga; null si nunca se
+// descargó (sin caché). Los montos llegan calculados del servidor: no se recalculan.
 export async function getHistorialCliente(cliente) {
   const db = await getDatabase();
-  const meta = await db.getFirstAsync('SELECT value FROM app_meta WHERE key = ?', [`historial_facturas_at:${cliente}`]);
+  // Última consulta en línea de este cliente o, si no hay, el último Cargar datos.
+  const meta = await db.getFirstAsync(
+    `SELECT COALESCE((SELECT value FROM app_meta WHERE key = ?),
+                     (SELECT value FROM app_meta WHERE key = 'sync_historial_facturas_at')) AS value`,
+    [`historial_facturas_at:${cliente}`]
+  );
   const filas = await db.getAllAsync(
     `SELECT COD_CIA, NUM_FAC, NUM_PED, COD_ZON, FEC_FAC, MON_FAC, ANULADA, COD_CND,
-            TOTAL_MERCADERIA, DESCUENTO_VOLUMEN, SUBTOTAL, IVA, GRAN_TOTAL
+            TOTAL_MERCADERIA, DESCUENTO_VOLUMEN, SUBTOTAL, IVA, GRAN_TOTAL, AGENTE, NOMBRE_AGENTE
        FROM HISTORIAL_FAC_ENC
       WHERE COD_CLT = ?
       ORDER BY ORDEN`,
@@ -26,6 +31,8 @@ export async function getHistorialCliente(cliente) {
       total: r.MON_FAC,
       anulada: r.ANULADA === 1,
       condicionPago: r.COD_CND,
+      agente: r.AGENTE ?? '',
+      nombreAgente: r.NOMBRE_AGENTE ?? '',
       montos: {
         totalMercaderia: r.TOTAL_MERCADERIA,
         descuentoVolumen: r.DESCUENTO_VOLUMEN,

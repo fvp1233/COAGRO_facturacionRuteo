@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import DataTable from '../ui/DataTable';
-import { formatFechaDoc, formatMonto } from '../../utils/formato';
+import { formatFechaDoc, formatMonto, formatVendedor } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
 // Distintivo rojo de factura anulada (también lo usa el detalle).
@@ -50,12 +50,22 @@ const COLUMNS = [
       </Text>
     ),
   },
+  {
+    key: 'vendedor',
+    title: 'Vendedor',
+    width: 140,
+    render: (f) => (
+      <Text style={[styles.texto, f.anulada && styles.atenuada]} numberOfLines={2}>
+        {formatVendedor(f)}
+      </Text>
+    ),
+  },
 ];
 
 export const claveFactura = (f) => `${f.compania}|${f.numero}`;
 
 // Tabla del historial de facturas de un cliente (seleccionable).
-// facturas: [{ compania, numero, pedido, fecha, total (MON_FAC), anulada }]
+// facturas: [{ compania, numero, pedido, fecha, total (MON_FAC), anulada, agente, nombreAgente }]
 export default function HistorialFacturasTable({ facturas, selectedKey, onSelect, highlightKey, emptyText, style }) {
   return (
     <DataTable

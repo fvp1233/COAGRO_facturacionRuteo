@@ -265,7 +265,8 @@ export const migrations = [
   // ESE cliente. Llave: COD_CIA + NUM_PED. FACTURAS = JSON con los NUM_FAC que salieron del pedido.
   // TIENE_MONTOS 0 = el servidor mandó montos null (todo facturado); los montos son SOLO de las
   // líneas pendientes. HAY_FACTURADAS 1 = alguna línea ya facturada. ORDEN = posición en que llegó.
-  // En las líneas, PRECIO y TOTAL_LINEA vienen null si la línea está facturada.
+  // En las líneas facturadas, PRECIO y TOTAL_LINEA vienen de la factura (null si el servidor no
+  // pudo determinarlos).
   async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS HISTORIAL_PED_ENC (
@@ -308,6 +309,16 @@ export const migrations = [
         "TOTAL_LINEA" REAL
       );
       CREATE INDEX IF NOT EXISTS HISTORIAL_PED_DET_PED ON HISTORIAL_PED_DET ("COD_CIA", "NUM_PED", "NUM_LN");
+    `);
+  },
+
+  // v16: vendedor (agente) de cada factura del historial, para la columna Vendedor de
+  // Menú Consultar > Documentos. Llegan en el encabezado de /fr/sync/historialFacturas(Ruta);
+  // null si el servidor no los manda.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE HISTORIAL_FAC_ENC ADD COLUMN AGENTE TEXT;
+      ALTER TABLE HISTORIAL_FAC_ENC ADD COLUMN NOMBRE_AGENTE TEXT;
     `);
   },
 ];

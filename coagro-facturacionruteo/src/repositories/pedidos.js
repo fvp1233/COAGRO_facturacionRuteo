@@ -135,8 +135,9 @@ const r6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
 //   ruta: código de la ruta del cliente (COD_ZON). bodega: bodega del ERP de la ruta activa.
 //   encabezado: lo de PedidoView. lineas: las agregadas en PedidoArticulosView.
 //   entrega: Date de entrega elegida. fin: Date en que se guarda (HOR_FIN).
+//   notas: observaciones del pedido (OBS_PED; vacías = null).
 //   tipoDoc: TIP_DOC ('F' pedido, 'C' cotización; ver TIPOS_PEDIDO). Cada uno con su consecutivo.
-export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas, entrega, fin, tipoDoc = 'F' }) {
+export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas, entrega, fin, notas, tipoDoc = 'F' }) {
   if (!lineas.length) throw new Error('El documento no tiene artículos.');
   const db = await getDatabase();
   const columna = tipoDoc === 'C' ? 'FACTURA' : 'PEDIDO';
@@ -194,7 +195,7 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       HOR_FIN: toSqlLocal(fin),
       FEC_PED: soloFecha(fin),
       FEC_DES: soloFecha(entrega),
-      OBS_PED: null,
+      OBS_PED: String(notas ?? '').trim() || null,
       DIR_ENT: String(encabezado.direccionEntrega ?? '').trim() || 'ND',
       NIVEL_PRECIO: encabezado.nivelPrecio,
       MONEDA: lineas[0].moneda ?? encabezado.moneda ?? null,

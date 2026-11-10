@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,8 @@ const DESCUENTO1 = 0;
 const DESCUENTO2 = 0;
 // Días que se ofrecen para la entrega, desde hoy.
 const DIAS_ENTREGA = 30;
+// Largo máximo de las notas: OBS_PED en el servidor (se recorta igual al enviar).
+const MAX_NOTAS = 60;
 
 const fecha = (d) => d.toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const hora = (d) => d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
@@ -43,7 +45,8 @@ function Dato({ label, value, destacado = false }) {
 // impuestos) = Σ IMPUESTO2. Total neto = bruto − descuentos + IVA + OI.
 // La fecha de entrega la elige el vendedor (desde hoy); por defecto es hoy.
 // lineas: [{ subtotal, descuento, iva, oi, moneda }]. formatMonto(n, moneda) da el texto del monto.
-// onGuardar(entrega: Date) -> Promise: guarda el pedido; mientras tanto el botón queda deshabilitado.
+// onGuardar(entrega: Date, notas: string) -> Promise: guarda el pedido (notas = observaciones, OBS_PED);
+// mientras tanto el botón queda deshabilitado.
 // tipo: TIPOS_PEDIDO.pedido o .cotizacion (textos).
 export default function PedidoResumenModal({
   visible,
@@ -60,6 +63,7 @@ export default function PedidoResumenModal({
   // Fecha y hora en que se abre el resumen.
   const [ahora, setAhora] = useState(() => new Date());
   const [entrega, setEntrega] = useState(null);
+  const [notas, setNotas] = useState('');
   useEffect(() => {
     if (visible) setAhora(new Date());
   }, [visible]);
@@ -85,7 +89,7 @@ export default function PedidoResumenModal({
         onPress: async () => {
           setGuardando(true);
           try {
-            await onGuardar?.(entregaActual.fecha);
+            await onGuardar?.(entregaActual.fecha, notas);
           } finally {
             setGuardando(false);
           }
@@ -117,6 +121,22 @@ export default function PedidoResumenModal({
               options={opciones.map((o) => o.texto)}
               onChange={(texto) => setEntrega(opciones.find((o) => o.texto === texto)?.fecha ?? null)}
             />
+            <View style={styles.notas}>
+              <View style={styles.notasHeader}>
+                <Text style={styles.label}>Notas</Text>
+                <Text style={styles.label}>{notas.length}/{MAX_NOTAS}</Text>
+              </View>
+              <TextInput
+                style={styles.notasInput}
+                value={notas}
+                onChangeText={setNotas}
+                placeholder="Observaciones (opcional)"
+                placeholderTextColor={colors.textDisabled}
+                maxLength={MAX_NOTAS}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
           </View>
 
           <View style={styles.card}>
@@ -177,6 +197,19 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   destacado: { backgroundColor: colors.primarySoft, color: ACCENT },
+  notas: { gap: 4 },
+  notasHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  notasInput: {
+    minHeight: 64,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    fontSize: 15,
+    color: colors.text,
+  },
   bar: {
     padding: spacing.md,
     backgroundColor: colors.background,

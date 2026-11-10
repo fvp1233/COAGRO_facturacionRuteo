@@ -9,14 +9,19 @@ const facturasDe = (v) => {
   }
 };
 
-// Historial de pedidos del cliente guardado en el equipo (caché de la última consulta en línea,
-// services/historialPedidos), en el orden en que llegó: fecha descendente.
-// Devuelve { pedidos, descargado } — descargado: ISO de la última consulta exitosa; null si nunca
-// se consultó (sin caché). montos: null si todo el pedido está facturado; si no, SOLO de las líneas
+// Historial de pedidos del cliente guardado en el equipo (Cargar datos o la última consulta en
+// línea, services/historialPedidos), en el orden en que llegó: fecha descendente.
+// Devuelve { pedidos, descargado } — descargado: ISO de la última descarga; null si nunca se
+// descargó (sin caché). montos: null si todo el pedido está facturado; si no, SOLO de las líneas
 // pendientes (hayFacturadas = alguna línea ya facturada). No se recalculan.
 export async function getHistorialPedidos(cliente) {
   const db = await getDatabase();
-  const meta = await db.getFirstAsync('SELECT value FROM app_meta WHERE key = ?', [`historial_pedidos_at:${cliente}`]);
+  // Última consulta en línea de este cliente o, si no hay, el último Cargar datos.
+  const meta = await db.getFirstAsync(
+    `SELECT COALESCE((SELECT value FROM app_meta WHERE key = ?),
+                     (SELECT value FROM app_meta WHERE key = 'sync_historial_pedidos_at')) AS value`,
+    [`historial_pedidos_at:${cliente}`]
+  );
   const filas = await db.getAllAsync(
     `SELECT COD_CIA, NUM_PED, COD_ZON, FEC_PED, EST_PED, MON_PED, FACTURAS, HAY_FACTURADAS, TIENE_MONTOS,
             TOTAL_MERCADERIA, DESCUENTO_VOLUMEN, SUBTOTAL, IVA, GRAN_TOTAL
@@ -50,7 +55,8 @@ export async function getHistorialPedidos(cliente) {
 }
 
 // Líneas de un pedido del historial (llave COD_CIA + NUM_PED), por NUM_LN.
-// Nombre del artículo: ARTICULO.DES_ART (null si no está). En las facturadas precio y total son null.
+// Nombre del artículo: ARTICULO.DES_ART (null si no está). precio y total tal como llegan: en una
+// facturada vienen de la factura, o null si el servidor no pudo determinarlos (se muestra "—").
 export async function getLineasPedido(compania, numero) {
   const db = await getDatabase();
   const filas = await db.getAllAsync(
@@ -69,9 +75,9 @@ export async function getLineasPedido(compania, numero) {
     bonificacion: r.EST_BON === 'B',
     facturada: r.FACTURADA === 1,
     cantidad: r.CANTIDAD,
-    precio: r.FACTURADA === 1 ? null : r.PRECIO,
+    precio: r.PRECIO,
     descuento: r.MONT_DESC,
     porcDescuento: r.PRC_DESC,
-    total: r.FACTURADA === 1 ? null : r.TOTAL_LINEA,
+    total: r.TOTAL_LINEA,
   }));
 }

@@ -18,10 +18,10 @@ export const MODULES = [
     },
   },
   {
-    id: 'depositos',
-    title: 'Depósitos',
-    subtitle: 'Stock y bodega camión',
-    icon: { family: 'MaterialCommunityIcons', name: 'warehouse' },
+    id: 'presupuesto',
+    title: 'Presupuesto',
+    subtitle: 'Metas y avance de ventas',
+    icon: { family: 'MaterialCommunityIcons', name: 'calculator-variant' },
     badge: { label: 'Activo', dot: true },
     palette: {
       accent: colors.primary,
