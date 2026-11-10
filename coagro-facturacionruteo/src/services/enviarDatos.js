@@ -152,12 +152,15 @@ async function leerPendientes(db) {
     FEC_DES: fechaSql(a.FEC_DES),
   }));
 
-  // Consecutivo SIGUIENTE de cada ruta (ya incrementado en el equipo). Solo si se guardaron pedidos
-  // desde el último envío correcto.
+  // Consecutivos SIGUIENTES de cada ruta (ya incrementados en el equipo): PEDIDO de pedidos y FACTURA
+  // de cotizaciones. Solo si se guardaron documentos desde el último envío correcto.
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos =
     flag?.value === '1'
-      ? await db.getAllAsync("SELECT RUTA, PEDIDO FROM RUTA_CONSECUT_RT WHERE COALESCE(PEDIDO, '') <> ''")
+      ? await db.getAllAsync(
+          `SELECT RUTA, PEDIDO, FACTURA FROM RUTA_CONSECUT_RT
+            WHERE COALESCE(PEDIDO, '') <> '' OR COALESCE(FACTURA, '') <> ''`
+        )
       : [];
 
   return { ubicaciones, visitas, pedidos, aprobaciones, consecutivos };
@@ -241,7 +244,7 @@ export async function enviarPendientes() {
       'Consecutivo',
       datos.consecutivos,
       r.consecutivos,
-      (c) => `Ruta ${c.RUTA} (${c.PEDIDO})`,
+      (c) => `Ruta ${c.RUTA} (${[c.PEDIDO, c.FACTURA].filter(Boolean).join(', ')})`,
       async (c, error) => {
         if (error) consecutivosOk = false;
       }

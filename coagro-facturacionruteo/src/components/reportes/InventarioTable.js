@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 import DataTable from '../ui/DataTable';
 import { formatCantidad } from '../../utils/formato';
@@ -27,15 +28,41 @@ const COLUMNS = [
   { key: 'detalle', title: 'DETALLE', width: 84, align: 'right', render: (a) => <Cantidad value={a.detalle} /> },
 ];
 
+// Botón "Ver lotes" del artículo; sin lotes en la bodega de la ruta se muestra un guion.
+function BotonLotes({ articulo, onPress }) {
+  if (!articulo.lotes) return <Text style={styles.sinLotes}>—</Text>;
+  return (
+    <Pressable
+      onPress={() => onPress?.(articulo)}
+      hitSlop={6}
+      style={({ pressed }) => [styles.lotes, pressed && styles.pressed]}
+    >
+      <Feather name="layers" size={13} color={colors.primary} />
+      <Text style={styles.lotesText}>{articulo.lotes}</Text>
+    </Pressable>
+  );
+}
+
 // Tabla del reporte de Inventario.
-// `articulos`: [{ codigo, descripcion, familia, clase, almacen, detalle }]
-// (almacen = existencia; detalle = UND_EMP del artículo).
+// `articulos`: [{ codigo, descripcion, familia, clase, almacen, detalle, lotes }]
+// (almacen = existencia; detalle = UND_EMP del artículo; lotes = cantidad de lotes en la bodega).
 // primeraColumna: key de la columna que se muestra primero (la que se está buscando) y se resalta.
-export default function InventarioTable({ articulos, primeraColumna = 'codigo', style }) {
+// onVerLotes(articulo): al tocar el botón de lotes del artículo.
+export default function InventarioTable({ articulos, primeraColumna = 'codigo', onVerLotes, style }) {
   const columns = useMemo(() => {
     const primera = COLUMNS.find((c) => c.key === primeraColumna);
-    return primera ? [primera, ...COLUMNS.filter((c) => c !== primera)] : COLUMNS;
-  }, [primeraColumna]);
+    const ordenadas = primera ? [primera, ...COLUMNS.filter((c) => c !== primera)] : COLUMNS;
+    return [
+      ...ordenadas,
+      {
+        key: 'lotes',
+        title: 'LOTES',
+        width: 64,
+        align: 'center',
+        render: (a) => <BotonLotes articulo={a} onPress={onVerLotes} />,
+      },
+    ];
+  }, [primeraColumna, onVerLotes]);
 
   return (
     <DataTable
@@ -72,5 +99,27 @@ const styles = StyleSheet.create({
   qtyZero: {
     fontWeight: '400',
     color: colors.textMuted,
+  },
+  lotes: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  lotesText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  sinLotes: {
+    textAlign: 'center',
+    color: colors.textDisabled,
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

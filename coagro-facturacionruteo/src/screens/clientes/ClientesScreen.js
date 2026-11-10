@@ -12,7 +12,9 @@ import ClienteOpcionesView from './ClienteOpcionesView';
 import VisitaRegistroView from './VisitaRegistroView';
 import CobrosView from './CobrosView';
 import CobroDocumentosView from './CobroDocumentosView';
-import ConsultaDocumentosView from './ConsultaDocumentosView';
+import ConsultaCobrosView from './ConsultaCobrosView';
+import ConsultaPedidosView from './ConsultaPedidosView';
+import ConsultaFacturasView from './ConsultaFacturasView';
 import ConsultaClienteView from './ConsultaClienteView';
 import PedidoView from './PedidoView';
 import PedidoArticulosView from './PedidoArticulosView';
@@ -59,7 +61,7 @@ export default function ClientesScreen({ onBack }) {
   const [pedido, setPedido] = useState(null);
   // En Cotización: true = captura de una nueva; false = lista de cotizaciones del cliente.
   const [nuevaCotizacion, setNuevaCotizacion] = useState(false);
-  // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'documentos'); null = menú.
+  // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'cobros'); null = menú.
   const [consulta, setConsulta] = useState(null);
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
   const [consultaTab, setConsultaTab] = useState(null);
@@ -111,10 +113,10 @@ export default function ClientesScreen({ onBack }) {
           <ConsultaView
             onBack={() => setActiveTab('validar')}
             onOpenConsulta={(opcion) => {
-              if (opcion.id !== 'cliente') {
+              if (opcion.id !== 'cliente' && opcion.id !== 'cobros') {
                 Alert.alert(opcion.title, 'Próximamente.');
               } else if (!seleccion) {
-                Alert.alert('Cliente', 'Selecciona un cliente de la tabla primero.');
+                Alert.alert(opcion.title, 'Selecciona un cliente de la tabla primero.');
               } else {
                 setConsultaTab(opcion.id);
               }
@@ -306,9 +308,27 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  if (!validando && activeTab === 'consulta' && consultaTab === 'cobros' && seleccion) {
+    return (
+      <ConsultaCobrosView cliente={seleccion.cliente} ruta={seleccion.ruta} onBack={() => setConsultaTab(null)} />
+    );
+  }
+
+  if (validando && opcionActiva === 'consultar' && consulta === 'pedidos') {
+    return (
+      <ConsultaPedidosView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
+    );
+  }
+
   if (validando && opcionActiva === 'consultar' && consulta === 'documentos') {
     return (
-      <ConsultaDocumentosView
+      <ConsultaFacturasView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
+    );
+  }
+
+  if (validando && opcionActiva === 'consultar' && consulta === 'cobros') {
+    return (
+      <ConsultaCobrosView
         cliente={validando.cliente}
         ruta={validando.ruta}
         onBack={() => setConsulta(null)}
@@ -326,7 +346,7 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={() => setOpcionActiva(null)}
         onOpcion={(opcion) => {
-          if (opcion.id === 'documentos' || opcion.id === 'cliente') setConsulta(opcion.id);
+          if (['cobros', 'cliente', 'pedidos', 'documentos'].includes(opcion.id)) setConsulta(opcion.id);
           else Alert.alert(opcion.title, 'Próximamente.');
         }}
       />

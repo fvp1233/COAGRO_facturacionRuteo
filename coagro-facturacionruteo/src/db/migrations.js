@@ -202,4 +202,112 @@ export const migrations = [
       );
     `);
   },
+
+  // v13: sin cambios. Una versión de desarrollo (sin publicar) creaba aquí el historial de pedidos;
+  // el endpoint pasó a devolver facturas y la v14 borra esas tablas si existen.
+  async () => {},
+
+  // v14: caché del historial de FACTURAS del ERP por cliente (/fr/sync/historialPedidos?cliente=),
+  // solo consulta. Cada consulta exitosa reemplaza el historial de ESE cliente (COD_CLT). Los montos
+  // (TOTAL_MERCADERIA..GRAN_TOTAL) llegan calculados del servidor y no se recalculan.
+  // Llave: COD_CIA + NUM_FAC (varias facturas pueden venir del mismo NUM_PED). ANULADA 1 = anulada.
+  // ORDEN = posición en que llegó (fecha descendente). Las líneas se leen por COD_CIA + NUM_FAC.
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS HISTORIAL_PED_DET;
+      DROP TABLE IF EXISTS HISTORIAL_PED_ENC;
+      DELETE FROM app_meta WHERE key LIKE 'historial_pedidos_at:%';
+      CREATE TABLE IF NOT EXISTS HISTORIAL_FAC_ENC (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "NUM_FAC" TEXT NOT NULL,
+        "NUM_PED" TEXT,
+        "COD_CLT" TEXT,
+        "COD_ZON" TEXT,
+        "FEC_FAC" TEXT,
+        "MON_FAC" REAL,
+        "ANULADA" INTEGER NOT NULL DEFAULT 0,
+        "NCF" TEXT,
+        "COD_CND" TEXT,
+        "DESC1" REAL,
+        "DESC2" REAL,
+        "MONT_DESC1" REAL,
+        "MONT_DESC2" REAL,
+        "ACTIVIDAD_COMERCIAL" TEXT,
+        "ESTADO_COMPROBANTE" TEXT,
+        "TOTAL_MERCADERIA" REAL NOT NULL DEFAULT 0,
+        "DESCUENTO_VOLUMEN" REAL NOT NULL DEFAULT 0,
+        "SUBTOTAL" REAL NOT NULL DEFAULT 0,
+        "IVA" REAL NOT NULL DEFAULT 0,
+        "GRAN_TOTAL" REAL NOT NULL DEFAULT 0,
+        "ORDEN" INTEGER NOT NULL,
+        PRIMARY KEY ("COD_CIA", "NUM_FAC")
+      );
+      CREATE INDEX IF NOT EXISTS HISTORIAL_FAC_ENC_CLT ON HISTORIAL_FAC_ENC ("COD_CLT", "ORDEN");
+      CREATE TABLE IF NOT EXISTS HISTORIAL_FAC_DET (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "NUM_FAC" TEXT NOT NULL,
+        "NUM_LN" INTEGER,
+        "COD_ART" TEXT,
+        "EST_BON" TEXT,
+        "CANT_FAC" REAL,
+        "CANT_DEV" REAL,
+        "PRECIO" REAL,
+        "MONT_DESC" REAL,
+        "PRC_DESC" REAL,
+        "TOTAL_LINEA" REAL
+      );
+      CREATE INDEX IF NOT EXISTS HISTORIAL_FAC_DET_FAC ON HISTORIAL_FAC_DET ("COD_CIA", "NUM_FAC", "NUM_LN");
+    `);
+  },
+
+  // v15: caché del historial de PEDIDOS del ERP por cliente (/fr/sync/historialPedidos?cliente=),
+  // solo consulta; las facturas van aparte (v14). Cada consulta exitosa reemplaza el historial de
+  // ESE cliente. Llave: COD_CIA + NUM_PED. FACTURAS = JSON con los NUM_FAC que salieron del pedido.
+  // TIENE_MONTOS 0 = el servidor mandó montos null (todo facturado); los montos son SOLO de las
+  // líneas pendientes. HAY_FACTURADAS 1 = alguna línea ya facturada. ORDEN = posición en que llegó.
+  // En las líneas, PRECIO y TOTAL_LINEA vienen null si la línea está facturada.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS HISTORIAL_PED_ENC (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "NUM_PED" TEXT NOT NULL,
+        "COD_CLT" TEXT,
+        "COD_ZON" TEXT,
+        "FEC_PED" TEXT,
+        "EST_PED" TEXT,
+        "MON_PED" REAL,
+        "DESC1" REAL,
+        "DESC2" REAL,
+        "MONT_DESC1" REAL,
+        "MONT_DESC2" REAL,
+        "ACTIVIDAD_COMERCIAL" TEXT,
+        "FACTURAS" TEXT NOT NULL DEFAULT '[]',
+        "HAY_FACTURADAS" INTEGER NOT NULL DEFAULT 0,
+        "TIENE_MONTOS" INTEGER NOT NULL DEFAULT 0,
+        "TOTAL_MERCADERIA" REAL,
+        "DESCUENTO_VOLUMEN" REAL,
+        "SUBTOTAL" REAL,
+        "IVA" REAL,
+        "GRAN_TOTAL" REAL,
+        "ORDEN" INTEGER NOT NULL,
+        PRIMARY KEY ("COD_CIA", "NUM_PED")
+      );
+      CREATE INDEX IF NOT EXISTS HISTORIAL_PED_ENC_CLT ON HISTORIAL_PED_ENC ("COD_CLT", "ORDEN");
+      CREATE TABLE IF NOT EXISTS HISTORIAL_PED_DET (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "NUM_PED" TEXT NOT NULL,
+        "NUM_LN" INTEGER,
+        "COD_ART" TEXT,
+        "EST_BON" TEXT,
+        "EST_LN" TEXT,
+        "FACTURADA" INTEGER NOT NULL DEFAULT 0,
+        "CANTIDAD" REAL,
+        "PRECIO" REAL,
+        "MONT_DESC" REAL,
+        "PRC_DESC" REAL,
+        "TOTAL_LINEA" REAL
+      );
+      CREATE INDEX IF NOT EXISTS HISTORIAL_PED_DET_PED ON HISTORIAL_PED_DET ("COD_CIA", "NUM_PED", "NUM_LN");
+    `);
+  },
 ];

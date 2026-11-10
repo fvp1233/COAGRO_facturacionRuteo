@@ -32,6 +32,12 @@ export const PATHS = {
   syncConsecutivos: '/fr/sync/consecutivos',
   // Cotizaciones (TIP_DOC 'C') de las rutas de la handheld, para aprobarlas desde la app.
   syncCotizaciones: '/fr/sync/cotizaciones',
+  // Existencias por lote (ARTICULO_EXISTENCIA_LOTE) de las bodegas de la handheld.
+  syncLotes: '/fr/sync/lotes',
+  // Historial de PEDIDOS y de FACTURAS del ERP de UN cliente en las rutas de la handheld (encabezado,
+  // líneas y montos calculados). Se piden en línea al consultarlos; no van en Cargar datos.
+  historialPedidos: (cliente) => `/fr/sync/historialPedidos?cliente=${encodeURIComponent(cliente)}`,
+  historialFacturas: (cliente) => `/fr/sync/historialFacturas?cliente=${encodeURIComponent(cliente)}`,
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

@@ -100,7 +100,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
 // ('RP10001' -> 'RP10002', 'PR0500000302' -> 'PR0500000303').
 export function siguienteConsecutivo(actual) {
   const m = /^(.*?)(\d+)$/.exec(String(actual ?? '').trim());
-  if (!m) throw new Error(`El consecutivo de pedido "${actual ?? ''}" no termina en número.`);
+  if (!m) throw new Error(`El consecutivo "${actual ?? ''}" no termina en número.`);
   return m[1] + String(BigInt(m[2]) + 1n).padStart(m[2].length, '0');
 }
 
@@ -129,23 +129,26 @@ const insertar = (tabla, columnas) =>
 const r6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
 
 // Guarda un pedido nuevo en alFAC_ENC_PED + alFAC_DET_PED (SQLite local; se enviará al servidor
-// después: ENVIADO = 0, DOC_PRO = 'N'). El número sale de RUTA_CONSECUT_RT.PEDIDO de la ruta y, si todo se
-// guarda, el consecutivo avanza en 1. Todo en UNA transacción. Devuelve el número de pedido.
+// después: ENVIADO = 0, DOC_PRO = 'N'). El número sale de RUTA_CONSECUT_RT de la ruta (PEDIDO para
+// pedidos, FACTURA para cotizaciones: 'COTRT001'...) y, si todo se guarda, ese consecutivo avanza en 1.
+// Todo en UNA transacción. Devuelve el número del documento.
 //   ruta: código de la ruta del cliente (COD_ZON). bodega: bodega del ERP de la ruta activa.
 //   encabezado: lo de PedidoView. lineas: las agregadas en PedidoArticulosView.
 //   entrega: Date de entrega elegida. fin: Date en que se guarda (HOR_FIN).
-//   tipoDoc: TIP_DOC ('F' pedido, 'C' cotización; ver TIPOS_PEDIDO). Comparten consecutivo.
+//   tipoDoc: TIP_DOC ('F' pedido, 'C' cotización; ver TIPOS_PEDIDO). Cada uno con su consecutivo.
 export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas, entrega, fin, tipoDoc = 'F' }) {
   if (!lineas.length) throw new Error('El documento no tiene artículos.');
   const db = await getDatabase();
+  const columna = tipoDoc === 'C' ? 'FACTURA' : 'PEDIDO';
   let numero = null;
 
   await db.withTransactionAsync(async () => {
-    const consec = await db.getFirstAsync('SELECT PEDIDO FROM RUTA_CONSECUT_RT WHERE RUTA = ?', [ruta]);
-    if (!consec?.PEDIDO) {
-      throw new Error(`La ruta ${ruta} no tiene consecutivo de pedido. Descárgalo en Datos > Cargar datos.`);
+    const consec = await db.getFirstAsync(`SELECT ${columna} AS ACTUAL FROM RUTA_CONSECUT_RT WHERE RUTA = ?`, [ruta]);
+    if (!String(consec?.ACTUAL ?? '').trim()) {
+      const de = tipoDoc === 'C' ? 'cotización (FACTURA)' : 'pedido';
+      throw new Error(`La ruta ${ruta} no tiene consecutivo de ${de}. Descárgalo en Datos > Cargar datos.`);
     }
-    numero = String(consec.PEDIDO).trim();
+    numero = String(consec.ACTUAL).trim();
     const existe = await db.getFirstAsync('SELECT 1 AS x FROM alFAC_ENC_PED WHERE COD_ZON = ? AND NUM_PED = ?', [
       ruta,
       numero,
@@ -230,7 +233,7 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       await db.runAsync(insertar('alFAC_DET_PED', COLUMNAS_DET), COLUMNAS_DET.map((c) => det[c]));
     }
 
-    await db.runAsync('UPDATE RUTA_CONSECUT_RT SET PEDIDO = ? WHERE RUTA = ?', [siguienteConsecutivo(numero), ruta]);
+    await db.runAsync(`UPDATE RUTA_CONSECUT_RT SET ${columna} = ? WHERE RUTA = ?`, [siguienteConsecutivo(numero), ruta]);
     // El consecutivo nuevo también debe llegar al servidor (ver services/enviarDatos).
     await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('consecutivos_pendientes', '1')");
   });

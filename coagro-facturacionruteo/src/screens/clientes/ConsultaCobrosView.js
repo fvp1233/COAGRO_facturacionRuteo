@@ -36,11 +36,11 @@ const aFila = (d) => {
   };
 };
 
-// Menú Consultar > Documentos: documentos pendientes del cliente seleccionado (alCXC_PEN_COB,
+// Menú Consultar > Cobros: documentos pendientes de cobro del cliente seleccionado (alCXC_PEN_COB,
 // los mismos de Cobros; se descargan con Datos > Cargar datos).
 // Al seleccionar un documento aparece el botón Imprimir: descarga su PDF del backend (requiere
 // internet) y abre el menú del sistema para guardarlo o compartirlo (se imprime desde el celular).
-export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
+export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
   const insets = useSafeAreaInsets();
   const [documentos, setDocumentos] = useState([]);
   const [error, setError] = useState('');
@@ -83,7 +83,7 @@ export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Documentos" onBack={onBack} />
+      <CenteredHeader title="Cobros" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>
@@ -99,7 +99,7 @@ export default function ConsultaDocumentosView({ cliente, ruta, onBack }) {
           keyExtractor={claveFila}
           onRowPress={(item) => setSeleccionado(claveFila(item))}
           selectedKey={seleccionado}
-          emptyText="El cliente no tiene documentos"
+          emptyText="El cliente no tiene documentos pendientes de cobro"
         />
         {doc ? (
           <Text style={styles.docInfo} selectable>

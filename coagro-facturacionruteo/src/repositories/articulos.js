@@ -10,13 +10,15 @@ export async function getInventario(ruta, { incluirSinExistencia = false } = {})
   const rows = await db.getAllAsync(
     `SELECT a.COD_ART AS codigo, a.DES_ART AS descripcion, a.UND_EMP AS undEmp,
             a.COD_FAM AS familia, a.COD_CLS AS clase,
-            COALESCE(e.EXISTENCIA, 0) AS existencia
+            COALESCE(e.EXISTENCIA, 0) AS existencia,
+            (SELECT COUNT(DISTINCT l.LOTE) FROM ARTICULO_EXISTENCIA_LOTE l
+              WHERE l.ARTICULO = a.COD_ART AND l.BODEGA = ?) AS lotes
        FROM ARTICULO a
        LEFT JOIN ARTICULO_EXISTENCIA e ON e.ARTICULO = a.COD_ART AND e.BODEGA = ?
       WHERE a.GRP_ART = ?
       ${incluirSinExistencia ? '' : 'AND COALESCE(e.EXISTENCIA, 0) > 0'}
       ORDER BY a.ORDEN_ART, a.DES_ART`,
-    [ruta.bodegaErp, ruta.grupoArticulo]
+    [ruta.bodegaErp, ruta.bodegaErp, ruta.grupoArticulo]
   );
 
   return rows.map((r) => ({
@@ -26,7 +28,26 @@ export async function getInventario(ruta, { incluirSinExistencia = false } = {})
     clase: r.clase ?? '',
     almacen: r.existencia,
     detalle: r.undEmp ?? 0,
+    lotes: r.lotes ?? 0,
   }));
+}
+
+// Lotes de un artículo en la bodega del ERP de la ruta (ARTICULO_EXISTENCIA_LOTE; se descargan en
+// Datos > Cargar datos), del que vence primero al último. Un lote en varias localizaciones de la
+// misma bodega se muestra una vez con su existencia sumada.
+// [{ lote, vence ('YYYY-MM-DD...'), existencia }]
+export async function getLotesArticulo(ruta, articulo) {
+  if (!ruta?.bodegaErp) return [];
+  const db = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT LOTE AS lote, FECHA_VENCIMIENTO AS vence, SUM(EXISTENCIA) AS existencia
+       FROM ARTICULO_EXISTENCIA_LOTE
+      WHERE ARTICULO = ? AND BODEGA = ?
+      GROUP BY LOTE, FECHA_VENCIMIENTO
+      ORDER BY FECHA_VENCIMIENTO, LOTE`,
+    [articulo, ruta.bodegaErp]
+  );
+  return rows;
 }
 
 // Artículos que se pueden vender en un pedido: los de la ruta (grupo y bodega del ERP, como

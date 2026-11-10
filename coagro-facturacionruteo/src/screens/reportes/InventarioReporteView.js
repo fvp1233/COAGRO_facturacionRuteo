@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import Checkbox from '../../components/ui/Checkbox';
 import InventarioTable from '../../components/reportes/InventarioTable';
+import LotesModal from '../../components/reportes/LotesModal';
 import SearchBar from '../../components/ui/SearchBar';
 import { getAvisoInventario, getInventario } from '../../repositories/articulos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
@@ -22,6 +23,7 @@ const SEARCH_MODES = [
 ];
 
 // Reporte de Inventario: existencias de la base local (se descargan en Datos > Cargar datos).
+// El botón de la columna Lotes abre un popup con los lotes del artículo (lote, vencimiento, existencia).
 export default function InventarioReporteView({ onBack }) {
   const insets = useSafeAreaInsets();
   const [incluirSinExistencia, setIncluirSinExistencia] = useState(false);
@@ -32,6 +34,8 @@ export default function InventarioReporteView({ onBack }) {
   const [ruta, setRuta] = useState(null);
   const [searchMode, setSearchMode] = useState(SEARCH_MODES[0].key);
   const [query, setQuery] = useState('');
+  // Artículo cuyos lotes se muestran en el popup; null = cerrado.
+  const [lotesDe, setLotesDe] = useState(null);
 
   // Solo el grupo y la bodega del ERP de la ruta activa.
   useEffect(() => {
@@ -106,9 +110,11 @@ export default function InventarioReporteView({ onBack }) {
         {cargando ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : (
-          <InventarioTable articulos={filtrados} primeraColumna={searchMode} />
+          <InventarioTable articulos={filtrados} primeraColumna={searchMode} onVerLotes={setLotesDe} />
         )}
       </ScrollView>
+
+      <LotesModal articulo={lotesDe} ruta={ruta} onClose={() => setLotesDe(null)} />
     </View>
   );
 }

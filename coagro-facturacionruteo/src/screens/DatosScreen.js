@@ -9,6 +9,7 @@ import { descargarArticulos } from '../services/syncArticulos';
 import { descargarCobros, descargarCobrosAgente } from '../services/syncCobros';
 import { descargarConsecutivos } from '../services/syncConsecutivos';
 import { descargarCotizaciones } from '../services/syncCotizaciones';
+import { descargarLotes } from '../services/syncLotes';
 import { getDatabase } from '../db/database';
 import { refrescarSesion } from '../services/mobileAuth';
 import { contarPendientes, enviarPendientes, limpiarEnviados } from '../services/enviarDatos';
@@ -136,6 +137,7 @@ export default function DatosScreen({ module, onBack }) {
         clientes: await descargarClientes(),
         clientesCia: await descargarClientesCia(),
         articulos: await descargarArticulos(),
+        lotes: await descargarLotes(),
         cobros: await descargarCobros(),
         cobrosAgente: await descargarCobrosAgente(),
         consecutivos: await descargarConsecutivos(),
@@ -146,7 +148,7 @@ export default function DatosScreen({ module, onBack }) {
         await limpiarEnviados(db);
         for (const d of Object.values(descargas)) await d.guardar(db);
       });
-      const { clientes, clientesCia, articulos, cobros, cobrosAgente, consecutivos, cotizaciones } = Object.fromEntries(
+      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones } = Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
       setResumen({
@@ -154,6 +156,7 @@ export default function DatosScreen({ module, onBack }) {
         clientesCia: clientesCia.clientesCia,
         articulos: articulos.articulos,
         precios: articulos.precios,
+        lotes: lotes.lotes,
         documentos: cobros.documentos,
         documentosAgente: cobrosAgente.documentos,
         consecutivos: consecutivos.consecutivos,
@@ -162,6 +165,7 @@ export default function DatosScreen({ module, onBack }) {
           clientes.omitidos +
           clientesCia.omitidos +
           articulos.omitidos +
+          lotes.omitidos +
           cobros.omitidos +
           cobrosAgente.omitidos +
           consecutivos.omitidos +
@@ -243,7 +247,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes,{resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>
