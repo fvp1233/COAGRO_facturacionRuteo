@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
-import ClientTable from '../../components/clientes/ClientTable';
+import ClientCardList from '../../components/clientes/ClientCardList';
 import UbicacionMenu from '../../components/clientes/UbicacionMenu';
 import { DIAS, DIAS_FILTRO, ESTADOS } from '../../data/clientes';
 import { getClientesRuta, getRutas, getUbicacionCliente, guardarUbicacionCliente } from '../../repositories/clientes';
@@ -40,7 +40,7 @@ export default function ValidarView({
   const [rutaLabel, setRutaLabel] = useState('');
   const [dia, setDia] = useState(diaDeHoy);
   const [estado, setEstado] = useState(ESTADOS[0]);
-  const [ordenAlfabetico, setOrdenAlfabetico] = useState(true);
+  const [ordenAlfabetico, setOrdenAlfabetico] = useState(false);
   const [selectedCodigo, setSelectedCodigo] = useState(initialSelectedCodigo);
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState('');
@@ -243,33 +243,21 @@ export default function ValidarView({
           </Text>
         ) : null}
 
-        <ClientTable
+        <ClientCardList
           clientes={clientes}
           selectedCodigo={selectedCodigo}
           onSelect={(c) => {
+            // Tocar de nuevo la card seleccionada quita la selección.
+            if (c.codigo === selectedCodigo) {
+              setSelectedCodigo(null);
+              onSelectCliente?.(null, rutaCodigo);
+              return;
+            }
             setSelectedCodigo(c.codigo);
             onSelectCliente?.(c, rutaCodigo);
           }}
+          onUbicacion={() => setMenuOpen(true)}
         />
-
-        {selected ? (
-          <View style={styles.address}>
-            <View style={styles.addressIcon}>
-              <Feather name="map-pin" size={18} color={ACCENT} />
-            </View>
-            <View style={styles.addressTexts}>
-              <Text style={styles.addressLabel}>DIRECCIÓN / FINCA GANADERA</Text>
-              <Text style={styles.addressText}>{selected.direccion}</Text>
-            </View>
-            <Pressable
-              onPress={() => setMenuOpen(true)}
-              hitSlop={8}
-              style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
-            >
-              <MaterialCommunityIcons name="google-maps" size={24} color={colors.onPrimary} />
-            </Pressable>
-          </View>
-        ) : null}
       </ScrollView>
 
       <UbicacionMenu visible={menuOpen} onClose={() => setMenuOpen(false)} onSelect={handleMenu} />
@@ -331,9 +319,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
     marginTop: -spacing.xs,
   },
   countChip: {
@@ -349,45 +336,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.textMuted,
-  },
-  address: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  addressIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    backgroundColor: ACCENT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapButtonPressed: { opacity: 0.8 },
-  addressTexts: {
-    flex: 1,
-  },
-  addressLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    color: colors.textMuted,
-    marginBottom: 2,
-  },
-  addressText: {
-    fontSize: 15,
-    lineHeight: 21,
-    color: colors.text,
   },
 });

@@ -34,12 +34,8 @@ export const PATHS = {
   syncCotizaciones: '/fr/sync/cotizaciones',
   // Existencias por lote (ARTICULO_EXISTENCIA_LOTE) de las bodegas de la handheld.
   syncLotes: '/fr/sync/lotes',
-  // Historial de PEDIDOS y de FACTURAS del ERP de UN cliente en las rutas de la handheld (encabezado,
-  // líneas y montos calculados). Se piden en línea al consultarlos; no van en Cargar datos.
-  historialPedidos: (cliente) => `/fr/sync/historialPedidos?cliente=${encodeURIComponent(cliente)}`,
-  historialFacturas: (cliente) => `/fr/sync/historialFacturas?cliente=${encodeURIComponent(cliente)}`,
-  // Los mismos historiales de TODOS los clientes de las rutas de la handheld (últimos meses), para
-  // Cargar datos (consulta sin conexión).
+  // Historial de PEDIDOS y de FACTURAS del ERP de TODOS los clientes de las rutas de la handheld
+  // (últimos meses), para Cargar datos (consulta sin conexión).
   syncHistorialPedidosRuta: '/fr/sync/historialPedidosRuta',
   syncHistorialFacturasRuta: '/fr/sync/historialFacturasRuta',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).

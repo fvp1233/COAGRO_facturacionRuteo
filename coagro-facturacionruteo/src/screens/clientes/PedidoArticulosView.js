@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -8,7 +21,7 @@ import ArticulosAgregadosModal from '../../components/pedido/ArticulosAgregadosM
 import PedidoResumenModal from '../../components/pedido/PedidoResumenModal';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import Checkbox from '../../components/ui/Checkbox';
-import DataTable from '../../components/ui/DataTable';
+import Pagination from '../../components/ui/Pagination';
 import SearchBar from '../../components/ui/SearchBar';
 import { getArticulosPedido } from '../../repositories/articulos';
 import { guardarPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
@@ -19,9 +32,12 @@ import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
 
+// Artículos por página (el usuario puede elegir otro tamaño en la barra de paginación).
+const PAGE_SIZE = 10;
+
 const SEARCH_MODES = [
-  { key: 'familia', label: 'Familia', icon: 'layers' },
   { key: 'descripcion', label: 'Descripción', icon: 'file-text' },
+  { key: 'familia', label: 'Familia', icon: 'layers' },
   { key: 'codigo', label: 'Código', icon: 'hash' },
 ];
 
@@ -79,12 +95,42 @@ function calcular(articulo, linea, cliente) {
   return { cantidad, subtotal, porcDescuento, descuento, iva, oi, exoneracion, adicional, total, inventario };
 }
 
-const COLUMNS = [
-  { key: 'codigo', title: 'CÓDIGO', width: 84, numberOfLines: 1 },
-  { key: 'descripcion', title: 'DESCRIPCIÓN', width: 200, grow: true },
-  { key: 'factorVenta', title: 'FACTOR', width: 64, align: 'right', render: (a) => <Text style={styles.num}>{formatCantidad(a.factorVenta)}</Text> },
-  { key: 'precio', title: 'PRECIO', width: 96, align: 'right', render: (a) => <Text style={styles.num}>{monto(a.precio, a.moneda)}</Text> },
-];
+// Card de un artículo: código, descripción, precio por unidad de almacén y existencia. Si ya está en
+// el pedido se marca con su cantidad (al tocarla se carga lo capturado para corregirlo).
+const ArticuloCard = memo(function ArticuloCard({ articulo, agregado, onPress }) {
+  const sinExistencia = articulo.existencia <= 0;
+  return (
+    <Pressable
+      onPress={() => onPress(articulo)}
+      style={({ pressed }) => [styles.artCard, agregado && styles.artCardAgregado, pressed && styles.pressed]}
+    >
+      <View style={styles.artBody}>
+        <View style={styles.artTop}>
+          <View style={styles.codeChip}>
+            <Text style={styles.codeText}>{articulo.codigo}</Text>
+          </View>
+          {agregado ? (
+            <View style={styles.enPedido}>
+              <Feather name="shopping-cart" size={11} color={colors.success} />
+              <Text style={styles.enPedidoText} numberOfLines={1}>{agregado.cantidadTexto}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.artNombre} numberOfLines={2}>{articulo.descripcion}</Text>
+        <View style={styles.artMeta}>
+          <Feather name="package" size={12} color={sinExistencia ? colors.error : colors.textMuted} />
+          <Text style={[styles.artMetaText, sinExistencia && styles.alerta]} numberOfLines={1}>
+            {unidades(articulo.existencia, articulo)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.artPrecioBox}>
+        <Text style={styles.artPrecio}>{monto(articulo.precio, articulo.moneda)}</Text>
+        {articulo.empAlm ? <Text style={styles.artUnidad}>por {articulo.empAlm}</Text> : null}
+      </View>
+    </Pressable>
+  );
+});
 
 // entero: solo dígitos (teclado numérico sin punto). disabled: se muestra pero no se puede escribir.
 function Campo({ label, value, onChange, onBlur, entero = false, disabled = false }) {
@@ -115,9 +161,9 @@ function Dato({ label, value, alerta = false }) {
 }
 
 // Detalle del pedido: artículos de la ruta activa (su grupo y su bodega del ERP) con precio vigente
-// en la lista elegida en el encabezado. Al elegir un artículo en la tabla, abajo se llenan sus
-// datos; el usuario escribe la cantidad y, si aplica, el % de descuento, y lo agrega al pedido con +
-// (como un carrito: una línea por artículo; volver a agregarlo la reemplaza). La lupa abre la lista
+// en la lista elegida en el encabezado, en cards. Al tocar un artículo se abre un popup con sus
+// datos; el usuario escribe la cantidad y, si aplica, el % de descuento, y lo agrega al pedido con
+// el botón Agregar (como un carrito: una línea por artículo; volver a agregarlo la reemplaza). La lupa abre la lista
 // de agregados, donde se pueden eliminar. Total = suma de todas las líneas agregadas.
 // encabezado: lo elegido en PedidoView (país, condición de pago, nivel de precio, moneda, subtipo...).
 // onGuardado(numero): se llama después de guardar el pedido (el contenedor registra la visita y
@@ -135,12 +181,18 @@ export default function PedidoArticulosView({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
-  const [searchMode, setSearchMode] = useState(SEARCH_MODES[0].key);
+  // Filtro inicial: por descripción.
+  const [searchMode, setSearchMode] = useState('descripcion');
   const [texto, setTexto] = useState('');
   // Búsqueda aplicada: solo cambia con Enter o con el botón de buscar.
-  // null = aún no se ha buscado: la tabla arranca vacía (buscar sin texto muestra todos).
-  const [busqueda, setBusqueda] = useState(null);
+  // Al abrir se muestran todos los artículos (paginados); buscar sin texto vuelve a mostrar todos.
+  const [busqueda, setBusqueda] = useState({ mode: 'descripcion', q: '' });
+  // false = solo artículos con existencia > 0 (lo normal al vender).
+  const [sinExistencia, setSinExistencia] = useState(false);
   const [seleccion, setSeleccion] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const listaRef = useRef(null);
   // Lo que se está capturando del artículo seleccionado: { almacen, detalle, descuento (textos;
   // descuento ausente = % general del cliente), canastaBasica }.
   const [borrador, setBorrador] = useState({});
@@ -183,8 +235,22 @@ export default function PedidoArticulosView({
   const filtrados = useMemo(() => {
     if (!busqueda) return [];
     const q = normalizar(busqueda.q);
-    return q ? articulos.filter((a) => normalizar(a[busqueda.mode]).includes(q)) : articulos;
-  }, [articulos, busqueda]);
+    // Por defecto solo los artículos con existencia; con la casilla marcada, todos.
+    return articulos.filter(
+      (a) => (sinExistencia || a.existencia > 0) && (!q || normalizar(a[busqueda.mode]).includes(q))
+    );
+  }, [articulos, busqueda, sinExistencia]);
+
+  // Solo se renderiza la página actual para no saturar el teléfono con miles de cards.
+  const pagina = useMemo(
+    () => filtrados.slice((page - 1) * pageSize, page * pageSize),
+    [filtrados, page, pageSize]
+  );
+
+  const irAPagina = (n) => {
+    setPage(n);
+    listaRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
 
   const articulo = articulos.find((a) => a.codigo === seleccion) ?? null;
   const linea = articulo ? { almacen: '', detalle: '', canastaBasica: articulo.canastaBasica, ...borrador } : null;
@@ -195,15 +261,16 @@ export default function PedidoArticulosView({
 
   const cambiar = (campo) => (v) => setBorrador((prev) => ({ ...prev, [campo]: v }));
 
-  // Si el artículo ya está agregado, se carga lo que tenía para poder corregirlo.
+  // Si el artículo ya está agregado, se carga lo que tenía para poder corregirlo; si es nuevo, la
+  // cantidad en almacén arranca en 1.
   const seleccionar = (a) => {
     setSeleccion(a.codigo);
-    setBorrador(agregados.find((l) => l.codigo === a.codigo)?.borrador ?? {});
+    setBorrador(agregados.find((l) => l.codigo === a.codigo)?.borrador ?? { almacen: '1' });
   };
 
   const agregar = () => {
     if (!articulo) {
-      Alert.alert('Agregar artículo', 'Selecciona un artículo de la tabla primero.');
+      Alert.alert('Agregar artículo', 'Selecciona un artículo primero.');
       return;
     }
     if (calculo.cantidad <= 0) {
@@ -243,6 +310,14 @@ export default function PedidoArticulosView({
     setSeleccion(null);
     setBorrador({});
   };
+
+  const cerrarCaptura = () => {
+    setSeleccion(null);
+    setBorrador({});
+  };
+
+  // Línea ya agregada por código (para marcar las cards que están en el pedido).
+  const enPedido = useMemo(() => new Map(agregados.map((l) => [l.codigo, l])), [agregados]);
 
   const eliminar = (codigo) => {
     const l = agregados.find((x) => x.codigo === codigo);
@@ -304,97 +379,190 @@ export default function PedidoArticulosView({
       <StatusBar style="dark" />
       <CenteredHeader title={`Artículos ${tipo.del}`} onBack={salir} />
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.infoRow}>
-          <Text style={styles.info} numberOfLines={1}>
-            {cliente.codigo} · {cliente.nombre}
-            {encabezado?.nivelPrecio ? ` · ${encabezado.nivelPrecio}` : ''}
-          </Text>
-          <View style={styles.countChip}>
-            <Feather name="shopping-cart" size={12} color={colors.textMuted} />
-            <Text style={styles.countText}>{agregados.length}</Text>
-          </View>
-        </View>
-
-        {error ? <Text style={styles.warning}>{error}</Text> : null}
-        {!error && aviso ? <Text style={styles.warning}>{aviso}</Text> : null}
-
-        {cargando ? (
-          <ActivityIndicator color={ACCENT} style={styles.loading} />
-        ) : (
-          <DataTable
-            columns={COLUMNS}
-            data={filtrados}
-            keyExtractor={(a) => a.codigo}
-            onRowPress={seleccionar}
-            selectedKey={seleccion}
-            highlightKey={busqueda?.mode}
-            emptyText={
-              busqueda ? 'No hay artículos para mostrar' : 'Escribe en la búsqueda y presiona buscar para ver los artículos'
-            }
-          />
+      <FlatList
+        ref={listaRef}
+        data={cargando ? [] : pagina}
+        keyExtractor={(a) => a.codigo}
+        renderItem={({ item }) => (
+          <ArticuloCard articulo={item} agregado={enPedido.get(item.codigo)} onPress={seleccionar} />
         )}
-
-        <SearchBar
-          modes={SEARCH_MODES}
-          mode={searchMode}
-          onModeChange={setSearchMode}
-          query={texto}
-          onQueryChange={setTexto}
-          onSubmit={(q) => setBusqueda({ mode: searchMode, q })}
-        />
-
-        <View style={styles.card}>
-          {articulo ? (
-            <>
-              <Text style={styles.cardTitle} numberOfLines={2}>
-                {articulo.codigo} - {articulo.descripcion}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        windowSize={7}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <View style={styles.infoRow}>
+              <Text style={styles.info} numberOfLines={1}>
+                {cliente.codigo} · {cliente.nombre}
+                {encabezado?.nivelPrecio ? ` · ${encabezado.nivelPrecio}` : ''}
               </Text>
-              <View style={styles.grid}>
-                <Campo
-                  label={`Almacén${articulo.empAlm ? ` (${articulo.empAlm})` : ''}`}
-                  value={linea.almacen}
-                  onChange={cambiar('almacen')}
-                  entero
-                />
-                <Campo
-                  label={
-                    articulo.factorVenta > 1
-                      ? `Detalle (${articulo.empDet || 'unid.'} · ${formatCantidad(articulo.factorVenta)} x ${articulo.empAlm || 'alm.'})`
-                      : 'Detalle (no se fracciona)'
-                  }
-                  value={articulo.factorVenta > 1 ? linea.detalle : ''}
-                  onChange={cambiar('detalle')}
-                  onBlur={() => setBorrador((prev) => normalizarDetalle({ ...linea, ...prev }, articulo.factorVenta))}
-                  disabled={articulo.factorVenta <= 1}
-                />
-                {/* Precio de lista por unidad de almacén, siempre visible para el vendedor. */}
-                <Dato
-                  label={`Precio${articulo.empAlm ? ` (${articulo.empAlm})` : ''}`}
-                  value={monto(articulo.precio, articulo.moneda)}
-                />
-                <Campo
-                  label={`Descuento % (${monto(calculo.descuento, articulo.moneda)})`}
-                  value={linea.descuento ?? (datosCliente.descuento ? String(datosCliente.descuento) : '')}
-                  onChange={cambiar('descuento')}
-                />
-                <Dato label="Bonificación" value={formatCantidad(BONIFICACION)} />
-                <Dato label="Subtotal" value={monto(calculo.subtotal, articulo.moneda)} />
-                <Dato
-                  label={`Adicional (${formatPorcentaje(articulo.impuesto1 + articulo.impuesto2)})`}
-                  value={monto(calculo.adicional, articulo.moneda)}
-                />
-                <Dato label="Total de línea" value={monto(calculo.total, articulo.moneda)} />
-                <Dato label="Existencia" value={unidades(articulo.existencia, articulo)} />
-                <Dato label="Inventario" value={unidades(calculo.inventario, articulo)} alerta={calculo.inventario < 0} />
-              </View>
-              <Checkbox label="Es canasta básica" checked={linea.canastaBasica} onChange={cambiar('canastaBasica')} />
-            </>
+            </View>
+
+            {error ? <Text style={styles.warning}>{error}</Text> : null}
+            {!error && aviso ? <Text style={styles.warning}>{aviso}</Text> : null}
+
+            <SearchBar
+              modes={SEARCH_MODES}
+              mode={searchMode}
+              onModeChange={setSearchMode}
+              query={texto}
+              onQueryChange={setTexto}
+              onSubmit={(q) => {
+                setBusqueda({ mode: searchMode, q });
+                setPage(1);
+              }}
+            />
+
+            <View style={styles.filtroRow}>
+              <Text style={styles.contador}>
+                {cargando ? '' : `${filtrados.length} ${filtrados.length === 1 ? 'artículo' : 'artículos'}`}
+              </Text>
+              <Checkbox
+                label="Incluir artículos sin existencia"
+                checked={sinExistencia}
+                onChange={(v) => {
+                  setSinExistencia(v);
+                  irAPagina(1);
+                }}
+              />
+            </View>
+          </View>
+        }
+        ListFooterComponent={
+          !cargando && filtrados.length > 0 ? (
+            <View style={styles.paginacion}>
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={filtrados.length}
+                onPageChange={irAPagina}
+                onPageSizeChange={(n) => {
+                  setPageSize(n);
+                  irAPagina(1);
+                }}
+              />
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          cargando ? (
+            <ActivityIndicator color={ACCENT} style={styles.loading} />
           ) : (
-            <Text style={styles.empty}>Selecciona un artículo de la tabla para ver sus datos y escribir la cantidad.</Text>
-          )}
-        </View>
-      </ScrollView>
+            <View style={styles.emptyBox}>
+              <Feather name="search" size={28} color={colors.textDisabled} />
+              <Text style={styles.empty}>
+                {busqueda
+                  ? 'No hay artículos para mostrar'
+                  : 'Escribe en la búsqueda y presiona buscar para ver los artículos'}
+              </Text>
+            </View>
+          )
+        }
+      />
+
+      {/* Popup de captura del artículo seleccionado. */}
+      <Modal visible={Boolean(articulo)} transparent animationType="slide" onRequestClose={cerrarCaptura}>
+        <KeyboardAvoidingView
+          style={styles.backdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={cerrarCaptura} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+            {articulo ? (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={styles.sheetTitulo}>
+                    <View style={styles.codeChip}>
+                      <Text style={styles.codeText}>{articulo.codigo}</Text>
+                    </View>
+                    <Text style={styles.sheetNombre} numberOfLines={3}>{articulo.descripcion}</Text>
+                  </View>
+                  <Pressable onPress={cerrarCaptura} hitSlop={10}>
+                    <Feather name="x" size={22} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+                  {/* Existencia e inventario (lo que queda después de este pedido). */}
+                  <View style={styles.stockRow}>
+                    <View style={styles.stockItem}>
+                      <Text style={styles.stockLabel}>EXISTENCIA</Text>
+                      <Text style={styles.stockValor}>{unidades(articulo.existencia, articulo)}</Text>
+                    </View>
+                    <View style={styles.stockItem}>
+                      <Text style={styles.stockLabel}>INVENTARIO</Text>
+                      <Text style={[styles.stockValor, calculo.inventario < 0 && styles.alerta]}>
+                        {unidades(calculo.inventario, articulo)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.seccion}>CANTIDAD</Text>
+                  <View style={styles.grid}>
+                    <Campo
+                      label={`Almacén${articulo.empAlm ? ` (${articulo.empAlm})` : ''}`}
+                      value={linea.almacen}
+                      onChange={cambiar('almacen')}
+                      entero
+                    />
+                    <Campo
+                      label={
+                        articulo.factorVenta > 1
+                          ? `Detalle (${articulo.empDet || 'unid.'} · ${formatCantidad(articulo.factorVenta)} x ${articulo.empAlm || 'alm.'})`
+                          : 'Detalle (no se fracciona)'
+                      }
+                      value={articulo.factorVenta > 1 ? linea.detalle : ''}
+                      onChange={cambiar('detalle')}
+                      onBlur={() => setBorrador((prev) => normalizarDetalle({ ...linea, ...prev }, articulo.factorVenta))}
+                      disabled={articulo.factorVenta <= 1}
+                    />
+                  </View>
+
+                  <Text style={styles.seccion}>PRECIO Y DESCUENTO</Text>
+                  <View style={styles.grid}>
+                    {/* Precio de lista por unidad de almacén, siempre visible para el vendedor. */}
+                    <Dato
+                      label={`Precio${articulo.empAlm ? ` (${articulo.empAlm})` : ''}`}
+                      value={monto(articulo.precio, articulo.moneda)}
+                    />
+                    <Campo
+                      label={`Descuento % (${monto(calculo.descuento, articulo.moneda)})`}
+                      value={linea.descuento ?? (datosCliente.descuento ? String(datosCliente.descuento) : '')}
+                      onChange={cambiar('descuento')}
+                    />
+                    <Dato label="Bonificación" value={formatCantidad(BONIFICACION)} />
+                    <Dato
+                      label={`Adicional (${formatPorcentaje(articulo.impuesto1 + articulo.impuesto2)})`}
+                      value={monto(calculo.adicional, articulo.moneda)}
+                    />
+                  </View>
+
+                  <Checkbox label="Es canasta básica" checked={linea.canastaBasica} onChange={cambiar('canastaBasica')} />
+
+                  <View style={styles.totales}>
+                    <View style={styles.totalFila}>
+                      <Text style={styles.totalLabel}>Subtotal</Text>
+                      <Text style={styles.totalValor}>{monto(calculo.subtotal, articulo.moneda)}</Text>
+                    </View>
+                    <View style={styles.totalFila}>
+                      <Text style={styles.totalLabelFuerte}>Total de línea</Text>
+                      <Text style={styles.totalValorFuerte}>{monto(calculo.total, articulo.moneda)}</Text>
+                    </View>
+                  </View>
+                </ScrollView>
+
+                <Pressable onPress={agregar} style={({ pressed }) => [styles.agregarButton, pressed && styles.pressed]}>
+                  <Feather name={enPedido.has(articulo.codigo) ? 'check' : 'plus'} size={20} color={colors.onPrimary} />
+                  <Text style={styles.agregarText}>
+                    {enPedido.has(articulo.codigo) ? 'Actualizar artículo' : 'Agregar artículo'}
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <View style={styles.bar}>
         <Pressable
@@ -412,9 +580,6 @@ export default function PedidoArticulosView({
           <Text style={styles.barTotalLabel}>Total {tipo.del}</Text>
           <Text style={styles.barTotalValue}>{monto(totalPedido, monedaPedido)}</Text>
         </View>
-        <Pressable onPress={agregar} style={({ pressed }) => [styles.barButton, styles.barPrimary, pressed && styles.pressed]}>
-          <Feather name="plus" size={22} color={colors.onPrimary} />
-        </Pressable>
         <Pressable
           onPress={siguiente}
           style={({ pressed }) => [styles.barButton, styles.barPrimary, (pressed || !agregados.length) && styles.pressed]}
@@ -451,16 +616,6 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.md },
   infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   info: { flex: 1, fontSize: 12, color: colors.textMuted },
-  countChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.border,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-  },
-  countText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   warning: {
     fontSize: 13,
     color: colors.error,
@@ -469,14 +624,119 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   loading: { marginTop: spacing.lg },
-  num: { textAlign: 'right', fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
-  card: {
+  header: { gap: spacing.md },
+  filtroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  paginacion: { marginTop: spacing.md },
+  contador: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  emptyBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  // Card del artículo.
+  artCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
     backgroundColor: colors.background,
     borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm + 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm + 4,
+    marginTop: spacing.sm + 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  artCardAgregado: { borderColor: colors.success, borderLeftWidth: 4 },
+  artBody: { flex: 1, gap: 4 },
+  artTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  codeChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm - 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  codeText: { fontSize: 12, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
+  enPedido: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E3F2F1',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  enPedidoText: { fontSize: 11, fontWeight: '700', color: colors.success },
+  artNombre: { fontSize: 14, fontWeight: '700', color: colors.text },
+  artMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  artMetaText: { flexShrink: 1, fontSize: 12, color: colors.textMuted },
+  artPrecioBox: { alignItems: 'flex-end' },
+  artPrecio: { fontSize: 16, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
+  artUnidad: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  // Popup de captura.
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    maxHeight: '92%',
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md + 4,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md + 4,
+    paddingBottom: spacing.sm,
+  },
+  sheetTitulo: { flex: 1, gap: 6 },
+  sheetNombre: { fontSize: 17, fontWeight: '700', color: colors.text },
+  sheetContent: { paddingHorizontal: spacing.md + 4, paddingBottom: spacing.md, gap: spacing.sm + 4 },
+  stockRow: { flexDirection: 'row', gap: spacing.sm },
+  stockItem: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
+  },
+  stockLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, color: colors.textMuted },
+  stockValor: { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 2 },
+  seccion: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: colors.textMuted, marginTop: spacing.xs },
+  totales: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  totalFila: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs + 2,
+  },
+  totalLabel: { fontSize: 14, color: colors.textMuted },
+  totalValor: { fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
+  totalLabelFuerte: { fontSize: 15, fontWeight: '700', color: colors.text },
+  totalValorFuerte: { fontSize: 20, fontWeight: '800', color: ACCENT, fontVariant: ['tabular-nums'] },
+  agregarButton: {
+    height: 50,
+    marginHorizontal: spacing.md + 4,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: ACCENT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  agregarText: { fontSize: 16, fontWeight: '700', color: colors.onPrimary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm + 4 },
   field: { width: '48%', gap: 4 },
   label: { fontSize: 12, color: colors.textMuted },
@@ -505,7 +765,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   alerta: { color: colors.error },
-  empty: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  empty: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.md },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

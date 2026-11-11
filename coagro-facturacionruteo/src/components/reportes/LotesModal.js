@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-import DataTable from '../ui/DataTable';
 import { getLotesArticulo } from '../../repositories/articulos';
 import { formatCantidad, formatFechaDoc } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
@@ -23,29 +22,31 @@ function estadoLote(vence, hoy, limite) {
   return null;
 }
 
-const COLUMNS = [
-  { key: 'lote', title: 'LOTE', width: 110, grow: true, numberOfLines: 1 },
-  {
-    key: 'vence',
-    title: 'VENCIMIENTO',
-    width: 104,
-    render: (l) => (
-      <View>
-        <Text style={[styles.fecha, l.estado && styles[l.estado]]}>{formatFechaDoc(l.vence) || '—'}</Text>
-        {l.estado ? (
-          <Text style={[styles.estado, styles[l.estado]]}>{l.estado === 'vencido' ? 'Vencido' : 'Por vencer'}</Text>
-        ) : null}
+// Color de la línea izquierda y del texto según el estado del lote.
+const ESTADO = {
+  vencido: { label: 'VENCIDO', color: colors.primary },
+  porVencer: { label: 'POR VENCER', color: colors.warning },
+};
+
+// Card de un lote: número de lote y vencimiento a la izquierda, existencia a la derecha.
+function LoteCard({ lote }) {
+  const estado = ESTADO[lote.estado];
+  return (
+    <View style={[styles.card, { borderLeftColor: estado?.color ?? colors.success }]}>
+      <View style={styles.cardBody}>
+        <Text style={styles.loteNombre} numberOfLines={1}>{lote.lote || 'Sin lote'}</Text>
+        <View style={styles.meta}>
+          <Feather name="calendar" size={12} color={estado ? styles[lote.estado].color : colors.textMuted} />
+          <Text style={[styles.fecha, estado && styles[lote.estado]]}>
+            Vence {formatFechaDoc(lote.vence) || '—'}
+          </Text>
+          {estado ? <Text style={[styles.estado, styles[lote.estado]]}>· {estado.label}</Text> : null}
+        </View>
       </View>
-    ),
-  },
-  {
-    key: 'existencia',
-    title: 'EXISTENCIA',
-    width: 90,
-    align: 'right',
-    render: (l) => <Text style={styles.qty}>{formatCantidad(l.existencia)}</Text>,
-  },
-];
+      <Text style={styles.qty}>{formatCantidad(lote.existencia)}</Text>
+    </View>
+  );
+}
 
 // Popup con los lotes del artículo en la bodega del ERP de la ruta (base local).
 // articulo: { codigo, descripcion } o null (cerrado). ruta: ruta activa (bodegaErp).
@@ -102,12 +103,11 @@ export default function LotesModal({ articulo, ruta, onClose }) {
             {cargando ? (
               <ActivityIndicator color={colors.primary} style={styles.loading} />
             ) : (
-              <DataTable
-                columns={COLUMNS}
-                data={lotes}
-                keyExtractor={(l) => `${l.lote}|${l.vence}`}
-                emptyText="El artículo no tiene lotes en la bodega de la ruta"
-              />
+              lotes.length ? (
+                lotes.map((l) => <LoteCard key={`${l.lote}|${l.vence}`} lote={l} />)
+              ) : (
+                <Text style={styles.empty}>El artículo no tiene lotes en la bodega de la ruta</Text>
+              )
             )}
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
@@ -127,6 +127,21 @@ export default function LotesModal({ articulo, ruta, onClose }) {
 }
 
 const styles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 4,
+    padding: spacing.sm + 4,
+  },
+  cardBody: { flex: 1, gap: 3 },
+  loteNombre: { fontSize: 14, fontWeight: '700', color: colors.text },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
+  empty: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',

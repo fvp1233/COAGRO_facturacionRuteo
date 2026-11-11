@@ -103,7 +103,7 @@ export default function ClientesScreen({ onBack }) {
           <ValidarView
             onBack={onBack}
             refreshKey={refreshKey}
-            onSelectCliente={(cliente, ruta) => setSeleccion({ cliente, ruta })}
+            onSelectCliente={(cliente, ruta) => setSeleccion(cliente ? { cliente, ruta } : null)}
             initialRutaCodigo={seleccion?.ruta ?? null}
             initialSelectedCodigo={seleccion?.cliente.codigo ?? null}
           />

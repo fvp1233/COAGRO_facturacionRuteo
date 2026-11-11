@@ -1,27 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import CenteredHeader from '../../components/ui/CenteredHeader';
+import Pagination from '../../components/ui/Pagination';
 import SearchBar from '../../components/ui/SearchBar';
-import HistorialPedidosTable, { EtiquetaEstadoPedido, clavePedido } from '../../components/historial/HistorialPedidosTable';
-import HistorialLineasTable from '../../components/historial/HistorialLineasTable';
+import HistorialLineasList from '../../components/historial/HistorialLineasList';
 import {
   ClienteHistorialCard,
+  clavePedido,
   Dato,
-  EncabezadoDocumento,
+  DetalleSheet,
+  EtiquetaEstadoPedido,
   MontosCard,
   TabsHistorial,
-  formatDescarga,
   historialStyles,
 } from '../../components/historial/HistorialComun';
 import { getHistorialPedidos, getLineasPedido } from '../../repositories/historialPedidos';
-import { getMontosFacturas } from '../../repositories/historialFacturas';
-import { actualizarHistorialPedidos } from '../../services/historialPedidos';
-import { actualizarHistorialCliente as actualizarHistorialFacturas } from '../../services/historialFacturas';
-import { isNetworkError } from '../../services/api';
+import { calcularMontos } from '../../utils/montos';
 import { formatFechaDoc, formatMonto } from '../../utils/formato';
 import { normalizar } from '../../utils/text';
 import { colors, radius, spacing } from '../../theme';
@@ -36,92 +34,120 @@ function FacturasDelPedido({ facturas }) {
   if (!facturas.length) return null;
   return (
     <View style={styles.facturas}>
-      <View style={styles.facturasTitulo}>
-        <Feather name="file-text" size={14} color={colors.textMuted} />
-        <Text style={styles.facturasLabel}>{facturas.length === 1 ? 'Factura' : 'Facturas'}</Text>
+      <Text style={historialStyles.seccionLabel}>{facturas.length === 1 ? 'FACTURA' : 'FACTURAS'}</Text>
+      <View style={styles.facturasChips}>
+        {facturas.map((numero) => (
+          <View key={numero} style={styles.facturaChip}>
+            <Feather name="file-text" size={12} color={colors.textMuted} />
+            <Text style={styles.facturaNumero} selectable>{numero}</Text>
+          </View>
+        ))}
       </View>
-      {facturas.map((numero) => (
-        <Text key={numero} style={styles.facturaNumero} selectable>{numero}</Text>
-      ))}
     </View>
   );
 }
 
+const esFacturado = (p) => p.estado === 'F';
+
+// Card compacta de un pedido: número, fecha, facturas y total. Línea izquierda = estado
+// (verde facturado, naranja pendiente).
+function PedidoCard({ pedido, onPress }) {
+  const fact = esFacturado(pedido);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [historialStyles.card, fact ? styles.cardFacturado : styles.cardPendiente, pressed && historialStyles.pressed]}
+    >
+      <View style={historialStyles.cardTexts}>
+        <Text style={historialStyles.cardNumero} numberOfLines={1}>{pedido.numero}</Text>
+        <View style={historialStyles.cardMeta}>
+          <Feather name="calendar" size={12} color={colors.textMuted} />
+          <Text style={historialStyles.cardMetaText}>{formatFechaDoc(pedido.fecha) || '—'}</Text>
+          {pedido.facturas.length ? (
+            <>
+              <Text style={historialStyles.cardMetaText}>·</Text>
+              <Feather name="file-text" size={12} color={colors.textMuted} />
+              <Text style={historialStyles.cardMetaText}>
+                {pedido.facturas.length} {pedido.facturas.length === 1 ? 'factura' : 'facturas'}
+              </Text>
+            </>
+          ) : null}
+        </View>
+      </View>
+      <View style={historialStyles.cardDerecha}>
+        <Text style={historialStyles.cardTotal}>{formatMonto(pedido.total)}</Text>
+        <Text style={[historialStyles.cardEstado, fact ? styles.textoFacturado : styles.textoPendiente]}>
+          {fact ? 'FACTURADO' : 'PENDIENTE'}
+        </Text>
+      </View>
+      <Feather name="chevron-right" size={18} color={colors.textDisabled} />
+    </Pressable>
+  );
+}
+
+// Registros por página (el usuario puede elegir otro tamaño en la barra de paginación).
+const PAGE_SIZE = 10;
+
 // Menú Consultar > Pedidos: historial de PEDIDOS del ERP del cliente en las rutas de la handheld
-// (se descarga en Datos > Cargar datos). Al abrir se muestra lo guardado en el equipo; Actualizar
-// (o un cliente sin nada guardado) consulta /fr/sync/historialPedidos y reemplaza su caché; sin red
-// se muestra la última caché con su fecha. Al seleccionar un pedido se
-// muestran abajo dos pestañas: Detalle (líneas) y Montos. Las facturas tienen su propia vista
+// (se descarga en Datos > Cargar datos). Solo se muestra lo guardado en el equipo (offline); no se
+// consulta en línea. Al tocar la card de un pedido se
+// abre un popup con su encabezado, sus facturas y dos pestañas: Detalle (líneas) y Montos. Las facturas tienen su propia vista
 // (Menú Consultar > Documentos); aquí solo se muestran sus números.
-// Pedido todo facturado (montos null): la pestaña Montos muestra los montos de sus facturas
-// (caché de facturas o, si no están, /fr/sync/historialFacturas; solo al abrir esa pestaña).
+// La pestaña Montos se calcula en el equipo con las líneas del pedido (utils/montos, misma
+// fórmula del backend): no necesita internet.
 export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
   const insets = useSafeAreaInsets();
   const [pedidos, setPedidos] = useState([]);
-  // ISO de la última consulta exitosa que se está mostrando; null = nada que mostrar.
+  // ISO de la descarga guardada en el equipo; null = el cliente no tiene historial descargado.
   const [descargado, setDescargado] = useState(null);
-  const [consultando, setConsultando] = useState(false);
-  const enCurso = useRef(false);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  // Sin red: se muestra la caché y se avisa de qué fecha es.
-  const [aviso, setAviso] = useState('');
   const [texto, setTexto] = useState('');
   const [seleccionado, setSeleccionado] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const scrollRef = useRef(null);
   const [tab, setTab] = useState('detalle');
   const [lineas, setLineas] = useState([]);
   const [cargandoLineas, setCargandoLineas] = useState(false);
 
-  const mostrarCache = useCallback(async () => {
-    const cache = await getHistorialPedidos(cliente.codigo);
-    setPedidos(cache.pedidos);
-    setDescargado(cache.descargado);
-    return cache;
-  }, [cliente.codigo]);
-
-  // Consulta en línea; una sola petición a la vez aunque se toque Actualizar de nuevo.
-  const consultar = useCallback(async () => {
-    if (enCurso.current) return;
-    enCurso.current = true;
-    setConsultando(true);
-    setError('');
-    setAviso('');
-    try {
-      await actualizarHistorialPedidos(cliente.codigo);
-      await mostrarCache();
-    } catch (e) {
-      if (isNetworkError(e)) {
-        const cache = await mostrarCache().catch(() => null);
-        if (cache?.descargado) {
-          setAviso(`Sin conexión: se muestran los pedidos descargados el ${formatDescarga(cache.descargado)}.`);
-        } else {
-          setError('Necesitas conexión para ver los pedidos.');
-        }
-      } else {
-        // El servidor rechazó la consulta (p. ej. el cliente no está en las rutas): no se muestra la caché.
-        setPedidos([]);
-        setDescargado(null);
-        setError(e?.message || 'No se pudo consultar el historial de pedidos.');
-      }
-    } finally {
-      enCurso.current = false;
-      setConsultando(false);
-    }
-  }, [cliente.codigo, mostrarCache]);
-
-  // Al abrir se muestra lo guardado en el equipo (Cargar datos); solo se consulta en línea si este
-  // cliente no tiene nada guardado. El botón Actualizar consulta en línea cuando se quiera.
+  // Historial guardado en el equipo (Datos > Cargar datos).
   useEffect(() => {
-    mostrarCache()
+    let cancelado = false;
+    getHistorialPedidos(cliente.codigo)
       .then((cache) => {
-        if (!cache.descargado) consultar();
+        if (cancelado) return;
+        setPedidos(cache.pedidos);
+        setDescargado(cache.descargado);
       })
-      .catch(() => consultar());
-  }, [mostrarCache, consultar]);
+      .catch((e) => {
+        if (!cancelado) setError(e?.message || 'No se pudo leer el historial de pedidos.');
+      })
+      .finally(() => {
+        if (!cancelado) setCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [cliente.codigo]);
 
   const filtrados = useMemo(() => {
     const q = normalizar(texto);
     return q ? pedidos.filter((p) => normalizar(p.numero).includes(q)) : pedidos;
   }, [pedidos, texto]);
+
+  // Al cambiar la búsqueda se vuelve a la primera página.
+  useEffect(() => {
+    setPage(1);
+  }, [texto]);
+
+  // Solo se renderiza la página actual.
+  const pagina = useMemo(() => filtrados.slice((page - 1) * pageSize, page * pageSize), [filtrados, page, pageSize]);
+
+  const irAPagina = (n) => {
+    setPage(n);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
 
   const pedido = pedidos.find((p) => clavePedido(p) === seleccionado) ?? null;
 
@@ -150,56 +176,13 @@ export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seleccionado, pedidos]);
 
-  // Montos de las facturas de un pedido todo facturado:
-  // { clave, cargando, montos, vigentes, anuladas, error }.
-  const [deFacturas, setDeFacturas] = useState(null);
-  const necesitaFacturas = tab === 'montos' && !!pedido && !pedido.montos && pedido.facturas.length > 0;
+  // Montos calculados en el equipo con las líneas del pedido (misma fórmula del backend).
+  const calculo = useMemo(() => calcularMontos(lineas), [lineas]);
 
-  useEffect(() => {
-    if (!necesitaFacturas) return undefined;
-    const clave = clavePedido(pedido);
-    if (deFacturas?.clave === clave && !deFacturas.error) return undefined;
-    let cancelado = false;
-    setDeFacturas({ clave, cargando: true });
-    (async () => {
-      let r = await getMontosFacturas(cliente.codigo, pedido.compania, pedido.facturas);
-      let error = null;
-      // Si alguna factura no está en la caché, se consulta el historial de facturas del cliente.
-      if (r.faltan.length) {
-        try {
-          await actualizarHistorialFacturas(cliente.codigo);
-          r = await getMontosFacturas(cliente.codigo, pedido.compania, pedido.facturas);
-        } catch (e) {
-          error = isNetworkError(e) ? 'Necesitas conexión para ver los montos de la factura.' : e?.message;
-        }
-      }
-      // Si sigue faltando alguna factura no se muestra una suma incompleta.
-      const completas = !r.faltan.length;
-      if (!cancelado) {
-        setDeFacturas({
-          clave,
-          cargando: false,
-          ...r,
-          montos: completas ? r.montos : null,
-          error: completas ? null : error ?? 'No se encontraron las facturas del pedido.',
-        });
-      }
-    })().catch(() => {
-      if (!cancelado) setDeFacturas({ clave, cargando: false, error: 'No se pudieron leer las facturas.' });
-    });
-    return () => {
-      cancelado = true;
-    };
-    // Solo cuando cambia el pedido mostrado o se abre la pestaña.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [necesitaFacturas, seleccionado]);
-
-  const montosFacturas = deFacturas && pedido && deFacturas.clave === clavePedido(pedido) ? deFacturas : null;
-
-  const vacio = consultando
-    ? 'Consultando los pedidos...'
+  const vacio = cargando
+    ? 'Cargando los pedidos...'
     : !descargado
-      ? 'Sin pedidos para mostrar'
+      ? 'No hay pedidos descargados para este cliente. Ve a Datos > Cargar datos.'
       : pedidos.length
         ? 'Ningún pedido coincide con la búsqueda'
         : 'Este cliente no tiene pedidos registrados';
@@ -209,38 +192,74 @@ export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
       <StatusBar style="dark" />
       <CenteredHeader title="Historial de pedidos" onBack={onBack} />
 
-      <ScrollView contentContainerStyle={historialStyles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={historialStyles.content} keyboardShouldPersistTaps="handled">
         <ClienteHistorialCard
           cliente={cliente}
           ruta={ruta}
           descargado={descargado}
-          consultando={consultando}
-          onActualizar={consultar}
         />
 
-        {aviso ? <Text style={historialStyles.aviso}>{aviso}</Text> : null}
         {error ? <Text style={historialStyles.error}>{error}</Text> : null}
 
         <SearchBar modes={SEARCH_MODES} mode="numero" query={texto} onQueryChange={setTexto} />
 
-        <HistorialPedidosTable
-          pedidos={filtrados}
-          selectedKey={seleccionado}
-          onSelect={(p) => setSeleccionado(clavePedido(p))}
-          emptyText={vacio}
-        />
+        {filtrados.length ? (
+          <View style={historialStyles.lista}>
+            <Text style={historialStyles.contador}>
+              {filtrados.length} {filtrados.length === 1 ? 'pedido' : 'pedidos'}
+            </Text>
+            {pagina.map((p) => (
+              <PedidoCard
+                key={clavePedido(p)}
+                pedido={p}
+                onPress={() => {
+                  setTab('detalle');
+                  setSeleccionado(clavePedido(p));
+                }}
+              />
+            ))}
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtrados.length}
+              onPageChange={irAPagina}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                irAPagina(1);
+              }}
+            />
+          </View>
+        ) : (
+          <View style={historialStyles.empty}>
+            {cargando ? (
+              <ActivityIndicator color={ACCENT} />
+            ) : (
+              <Feather name="shopping-bag" size={28} color={colors.textDisabled} />
+            )}
+            <Text style={historialStyles.emptyText}>{vacio}</Text>
+          </View>
+        )}
+      </ScrollView>
 
+      {/* Popup del pedido: encabezado, facturas y pestañas Detalle / Montos. */}
+      <DetalleSheet
+        visible={Boolean(pedido)}
+        tipo="PEDIDO"
+        numero={pedido?.numero}
+        etiquetas={pedido ? <EtiquetaEstadoPedido estado={pedido.estado} /> : null}
+        onClose={() => setSeleccionado(null)}
+      >
         {pedido ? (
-          <View style={historialStyles.detalle}>
-            <EncabezadoDocumento
-              tipo="Pedido"
-              numero={pedido.numero}
-              etiquetas={<EtiquetaEstadoPedido estado={pedido.estado} />}
-            >
+          <>
+            <View style={historialStyles.sheetTotal}>
+              <Text style={historialStyles.seccionLabel}>TOTAL DEL PEDIDO</Text>
+              <Text style={historialStyles.sheetTotalValor}>{formatMonto(pedido.total)}</Text>
+            </View>
+
+            <View style={historialStyles.datos}>
               <Dato label="Fecha" value={formatFechaDoc(pedido.fecha)} />
-              <Dato label="Total del pedido" value={formatMonto(pedido.total)} />
               {pedido.ruta ? <Dato label="Ruta" value={pedido.ruta} /> : null}
-            </EncabezadoDocumento>
+            </View>
 
             <FacturasDelPedido facturas={pedido.facturas} />
 
@@ -250,64 +269,56 @@ export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
               cargandoLineas ? (
                 <ActivityIndicator color={ACCENT} style={historialStyles.loading} />
               ) : (
-                <HistorialLineasTable lineas={lineas} />
+                <HistorialLineasList lineas={lineas} />
               )
-            ) : pedido.montos ? (
+            ) : cargandoLineas ? (
+              <ActivityIndicator color={ACCENT} style={historialStyles.loading} />
+            ) : lineas.length ? (
               <MontosCard
-                montos={pedido.montos}
+                montos={calculo.montos}
                 aviso={
-                  pedido.hayFacturadas ? (
-                    <Text style={historialStyles.avisoText}>Montos de líneas pendientes</Text>
+                  calculo.sinMonto ? (
+                    <Text style={historialStyles.avisoText}>
+                      {calculo.sinMonto} {calculo.sinMonto === 1 ? 'línea sin monto no incluida' : 'líneas sin monto no incluidas'}
+                    </Text>
                   ) : null
                 }
               />
-            ) : montosFacturas?.cargando ? (
-              <ActivityIndicator color={ACCENT} style={historialStyles.loading} />
-            ) : montosFacturas?.montos ? (
-              // Todo facturado: montos de sus facturas vigentes (los mismos de Documentos).
-              <MontosCard
-                montos={montosFacturas.montos}
-                aviso={
-                  <>
-                    <EtiquetaEstadoPedido estado="F" />
-                    <Text style={historialStyles.avisoText}>
-                      {montosFacturas.vigentes.length === 1
-                        ? `Montos de la factura ${montosFacturas.vigentes[0]}`
-                        : `Suma de ${montosFacturas.vigentes.length} facturas`}
-                      {montosFacturas.anuladas.length ? ` (sin ${montosFacturas.anuladas.length} anulada${montosFacturas.anuladas.length === 1 ? '' : 's'})` : ''}
-                    </Text>
-                  </>
-                }
-              />
             ) : (
-              // montos null y sin montos de facturas: solo el total del pedido.
+              // Sin líneas guardadas: solo el total del pedido.
               <View style={styles.facturado}>
-                <EtiquetaEstadoPedido estado="F" />
                 <Text style={styles.facturadoText}>
-                  Pedido facturado — total del pedido: <Text style={styles.facturadoTotal}>{formatMonto(pedido.total)}</Text>
+                  El pedido no tiene líneas guardadas — total del pedido:{' '}
+                  <Text style={styles.facturadoTotal}>{formatMonto(pedido.total)}</Text>
                 </Text>
-                {montosFacturas?.error ? <Text style={historialStyles.error}>{montosFacturas.error}</Text> : null}
               </View>
             )}
-          </View>
+          </>
         ) : null}
-      </ScrollView>
+      </DetalleSheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  facturas: {
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.xs,
+  cardFacturado: { borderLeftColor: colors.success },
+  cardPendiente: { borderLeftColor: colors.warning },
+  textoFacturado: { color: colors.success },
+  textoPendiente: { color: '#B85F00' },
+  facturas: { gap: spacing.xs + 2 },
+  facturasChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2 },
+  facturaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
   },
-  facturasTitulo: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  facturasLabel: { fontSize: 11, color: colors.textMuted },
   facturaNumero: { fontSize: 13, fontWeight: '600', color: colors.text },
   facturado: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm,

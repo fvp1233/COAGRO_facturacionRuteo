@@ -37,7 +37,11 @@ export async function getClientesRuta({ ruta, dia = null, estado = 'Todos' }) {
 
   const rows = await db.getAllAsync(
     `SELECT c.COD_CLT AS codigo, c.NOM_CLT AS nombre, c.DIR_CLT AS direccion,
-            MIN(o.ORDEN) AS orden
+            MIN(o.ORDEN) AS orden,
+            (SELECT MIN(v.INICIO) FROM VISITA v
+              WHERE v.CLIENTE = c.COD_CLT
+                AND v.RUTA = c.COD_ZON
+                AND date(v.INICIO) = date('now', 'localtime')) AS visitaHoy
        FROM CLIENTE c
        JOIN alFAC_RUTA_ORDEN o ON o.COD_CLT = c.COD_CLT AND o.COD_ZON = c.COD_ZON
       WHERE c.COD_ZON = ?
