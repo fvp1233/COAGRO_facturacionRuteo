@@ -1,6 +1,7 @@
 import { ApiError, postJson } from './api';
 import { getDatabase } from '../db/database';
 import { toSqlLocal } from '../repositories/visitas';
+import { leerDepositosPendientes, marcarPagosEnviados } from '../repositories/depositos';
 import { PATHS, TIMEOUT_ENVIO_MS } from '../config/api';
 
 // Envío al servidor (POST /fr/sync/enviar) de lo registrado en el equipo: ubicaciones de clientes,
@@ -15,7 +16,8 @@ const corta = (v, max) => (v == null ? null : String(v).slice(0, max));
 const fechaSql = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v} 00:00:00` : v ?? null);
 const numero = (v) => (v == null || v === '' ? null : Number(v));
 
-// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, consecutivos, total }).
+// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, depositos, consecutivos, total }).
+// Depósitos = alCXC_ENC_DEP sin enviar (el efectivo y los cheques aún sin depositar no cuentan).
 export async function contarPendientes() {
   const db = await getDatabase();
   const cuenta = async (tabla) => (await db.getFirstAsync(`SELECT COUNT(*) AS n FROM ${tabla} WHERE ENVIADO = 0`))?.n ?? 0;
@@ -23,6 +25,7 @@ export async function contarPendientes() {
   const visitas = await cuenta('VISITA');
   const pedidos = await cuenta('alFAC_ENC_PED');
   const aprobaciones = await cuenta('COTIZACION_APROBACION');
+  const depositos = (await leerDepositosPendientes(db)).length;
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos = flag?.value === '1' ? 1 : 0;
   return {
@@ -30,8 +33,9 @@ export async function contarPendientes() {
     visitas,
     pedidos,
     aprobaciones,
+    depositos,
     consecutivos,
-    total: ubicaciones + visitas + pedidos + aprobaciones + consecutivos,
+    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + consecutivos,
   };
 }
 
@@ -158,12 +162,18 @@ async function leerPendientes(db) {
   const consecutivos =
     flag?.value === '1'
       ? await db.getAllAsync(
-          `SELECT RUTA, PEDIDO, FACTURA FROM RUTA_CONSECUT_RT
-            WHERE COALESCE(PEDIDO, '') <> '' OR COALESCE(FACTURA, '') <> ''`
+          `SELECT RUTA, PEDIDO, FACTURA, RECIBO FROM RUTA_CONSECUT_RT
+            WHERE COALESCE(PEDIDO, '') <> '' OR COALESCE(FACTURA, '') <> '' OR COALESCE(RECIBO, '') <> ''`
         )
       : [];
 
-  return { ubicaciones, visitas, pedidos, aprobaciones, consecutivos };
+  // Depósitos (alCXC_ENC_DEP + alCXC_DET_DEP): agrupados por cuenta + boleta y por documento.
+  const depositos = (await leerDepositosPendientes(db)).map((d) => ({
+    ...d,
+    encabezado: { ...d.encabezado, FEC_DEP: fechaSql(d.encabezado.FEC_DEP), NOTAS: corta(d.encabezado.NOTAS, 80) },
+  }));
+
+  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, consecutivos };
 }
 
 // Envía todo lo pendiente y marca como enviado lo que el servidor guardó (ok, o duplicado de un envío
@@ -178,12 +188,15 @@ export async function enviarPendientes() {
     datos.visitas.length +
     datos.pedidos.length +
     datos.aprobaciones.length +
+    datos.depositos.length +
     datos.consecutivos.length;
   if (!total) return { enviados: 0, errores: [] };
 
   const json = await postJson(PATHS.syncEnviar, datos, { timeout: TIMEOUT_ENVIO_MS });
   const r = json?.result;
-  if (!r || !['ubicaciones', 'visitas', 'pedidos', 'aprobaciones', 'consecutivos'].every((k) => Array.isArray(r[k]))) {
+  const claves = ['ubicaciones', 'visitas', 'pedidos', 'aprobaciones', 'consecutivos'];
+  if (datos.depositos.length) claves.push('depositos');
+  if (!r || !claves.every((k) => Array.isArray(r[k]))) {
     throw new ApiError('La respuesta del servidor al envío no tiene el formato esperado.');
   }
 
@@ -239,12 +252,31 @@ export async function enviarPendientes() {
       (a) => `Cotización ${a.NUM_PED}`,
       marcarEn('COTIZACION_APROBACION', 'COD_ZON = ? AND NUM_PED = ?', (a) => [a.COD_ZON, a.NUM_PED])
     );
+    // Depósito ok (o duplicado de un envío anterior): queda enviado con su CONSEC_DEP del servidor.
+    await procesar(
+      'Depósito',
+      datos.depositos,
+      r.depositos ?? [],
+      (d) => `Recibo ${d.encabezado.NUM_DEP} (cuenta ${d.encabezado.CTA_BCO})`,
+      (d, error) => {
+        const { COD_CIA, COD_BCO, CTA_BCO, NUM_DEP } = d.encabezado;
+        const llave = [COD_CIA, COD_BCO, CTA_BCO, NUM_DEP];
+        const where = 'COD_CIA = ? AND COD_BCO = ? AND CTA_BCO = ? AND NUM_DEP = ?';
+        if (error) return db.runAsync(`UPDATE alCXC_ENC_DEP SET ERROR_ENVIO = ? WHERE ${where}`, [error, ...llave]);
+        const res = (r.depositos ?? []).find((x) => x?.CTA_BCO === CTA_BCO && String(x?.NUM_DEP) === NUM_DEP);
+        return db.runAsync(
+          `UPDATE alCXC_ENC_DEP SET ENVIADO = 1, FECHA_ENVIO = ?, ERROR_ENVIO = NULL, CONSEC_DEP = ? WHERE ${where}`,
+          [ahora, res?.CONSEC_DEP ?? null, ...llave]
+        );
+      }
+    );
+    if (datos.depositos.length) await marcarPagosEnviados(db);
     let consecutivosOk = true;
     await procesar(
       'Consecutivo',
       datos.consecutivos,
       r.consecutivos,
-      (c) => `Ruta ${c.RUTA} (${[c.PEDIDO, c.FACTURA].filter(Boolean).join(', ')})`,
+      (c) => `Ruta ${c.RUTA} (${[c.PEDIDO, c.FACTURA, c.RECIBO].filter(Boolean).join(', ')})`,
       async (c, error) => {
         if (error) consecutivosOk = false;
       }

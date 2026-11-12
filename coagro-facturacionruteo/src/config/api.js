@@ -7,8 +7,8 @@ export const API_PREFIX = '/api/v1';
 
 // Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
 // Con null se usa el servidor guardado en la pantalla de Conexión.
-export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
-// export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
+//export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
+ export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
 //export const BASE_URL = null;
 
 // /fr/mobile/registro y /fr/mobile/login no llevan token; el resto exige el token de la app
@@ -38,6 +38,10 @@ export const PATHS = {
   // (últimos meses), para Cargar datos (consulta sin conexión).
   syncHistorialPedidosRuta: '/fr/sync/historialPedidosRuta',
   syncHistorialFacturasRuta: '/fr/sync/historialFacturasRuta',
+  // Cuentas bancarias de la empresa (alCXC_CTA_BCO) donde se deposita / transfiere lo cobrado.
+  syncCuentasBanco: '/fr/sync/cuentasBanco',
+  // Recibos de cobro de la handheld que control aún no aplica en el ERP (DOC_PRO = 'N').
+  syncRecibosPendientes: '/fr/sync/recibosPendientes',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

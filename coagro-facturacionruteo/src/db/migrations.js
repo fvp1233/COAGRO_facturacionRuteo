@@ -321,4 +321,132 @@ export const migrations = [
       ALTER TABLE HISTORIAL_FAC_ENC ADD COLUMN NOMBRE_AGENTE TEXT;
     `);
   },
+
+  // v17: pagos (abonos) a documentos pendientes de cobro, registrados en el equipo
+  // (Cobros > Documentos a cobrar > Pagar). Un pago puede combinar varias formas (pago híbrido):
+  // COBRO_PAGO = encabezado (documento, moneda del cobro y monto total) y COBRO_PAGO_DET = una fila
+  // por forma de pago (CHEQUE | EFECTIVO | TRANSFERENCIA | DEPOSITO).
+  // MONEDA: 'L' local | 'D' dólar. Mientras ENVIADO = 0 el monto se descuenta del saldo del documento.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS COBRO_PAGO (
+        "ID" INTEGER PRIMARY KEY AUTOINCREMENT,
+        "COD_CLT" TEXT NOT NULL,
+        "COD_ZON" TEXT NOT NULL,
+        "COD_TIP_DC" TEXT NOT NULL,
+        "NUM_DOC" TEXT NOT NULL,
+        "MONEDA" TEXT NOT NULL,
+        "FECHA" TEXT NOT NULL,
+        "MONTO" REAL NOT NULL,
+        "SALDO_ANTERIOR" REAL,
+        "SALDO_NUEVO" REAL,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS COBRO_PAGO_DOC ON COBRO_PAGO ("COD_CLT", "COD_ZON", "COD_TIP_DC", "NUM_DOC");
+      CREATE TABLE IF NOT EXISTS COBRO_PAGO_DET (
+        "ID_PAGO" INTEGER NOT NULL REFERENCES COBRO_PAGO ("ID") ON DELETE CASCADE,
+        "LINEA" INTEGER NOT NULL,
+        "FORMA" TEXT NOT NULL,
+        "MONTO" REAL NOT NULL,
+        "NUM_CHEQUE" TEXT,
+        "NUM_CUENTA" TEXT,
+        "FECHA_CHEQUE" TEXT,
+        "NUM_TRANSACCION" TEXT,
+        PRIMARY KEY ("ID_PAGO", "LINEA")
+      );
+    `);
+  },
+
+  // v18: cuentas bancarias (GET /fr/sync/cuentasBanco). En el servidor la llave de alCXC_CTA_BCO es
+  // COD_CIA + COD_BCO + CTA_BCO; la tabla local (del esquema de Exactus) no tenía COD_CIA en la llave,
+  // así que la misma cuenta en dos compañías se pisaba: se vuelve a crear con la llave del servidor.
+  // El pago guarda la compañía del documento y, en transferencias/depósitos, la cuenta elegida
+  // (COD_CIA + COD_BCO + NUM_CUENTA), que es lo que pide el encabezado del depósito (alCXC_ENC_DEP).
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS alCXC_CTA_BCO;
+      CREATE TABLE alCXC_CTA_BCO (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_BCO" TEXT NOT NULL,
+        "CTA_BCO" TEXT NOT NULL,
+        "NOM_CTA" TEXT,
+        "MONEDA" TEXT,
+        PRIMARY KEY ("COD_CIA", "COD_BCO", "CTA_BCO")
+      );
+      ALTER TABLE COBRO_PAGO ADD COLUMN COD_CIA TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN COD_CIA TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN COD_BCO TEXT;
+    `);
+  },
+
+  // v19: depósitos (POST /fr/sync/enviar -> depositos -> alCXC_ENC_DEP + alCXC_DET_DEP).
+  // - alCXC_ENC_DEP se vuelve a crear: NUM_DEP (boleta) como TEXTO (en REAL se perdían dígitos),
+  //   llave del servidor (COD_CIA + COD_BCO + CTA_BCO + NUM_DEP) y control de envío.
+  //   ORIGEN: 'PAGO' = transferencia/depósito del cliente (nace al registrar el pago);
+  //           'DEPOSITO' = el vendedor deposita efectivo y cheques cobrados (Datos > Depósitos).
+  // - COBRO_PAGO_DET.DEP_*: depósito al que pertenece cada forma de pago. Las líneas de alCXC_DET_DEP
+  //   se arman al enviar, sumando por documento (NUM_DOC no se repite dentro de un depósito).
+  // - COBRO_PAGO.SALDO_SERVIDOR: saldo del documento en el servidor al registrar el abono (moneda del
+  //   abono). El abono se sigue descontando hasta que el saldo del servidor baje (lo aplicó control en el ERP).
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS alCXC_ENC_DEP;
+      CREATE TABLE alCXC_ENC_DEP (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_BCO" TEXT NOT NULL,
+        "CTA_BCO" TEXT NOT NULL,
+        "NUM_DEP" TEXT NOT NULL,
+        "FEC_DEP" TEXT NOT NULL,
+        "IND_MON" TEXT NOT NULL,
+        "NOTAS" TEXT,
+        "ORIGEN" TEXT NOT NULL,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        "CONSEC_DEP" INTEGER,
+        PRIMARY KEY ("COD_CIA", "COD_BCO", "CTA_BCO", "NUM_DEP")
+      );
+      ALTER TABLE COBRO_PAGO ADD COLUMN SALDO_SERVIDOR REAL;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN DEP_CIA TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN DEP_BCO TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN DEP_CTA TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN DEP_NUM TEXT;
+      CREATE INDEX IF NOT EXISTS COBRO_PAGO_DET_DEP ON COBRO_PAGO_DET ("DEP_CTA", "DEP_NUM");
+    `);
+  },
+
+  // v20: recibos. Cada pago a un documento es un recibo; su número sale de RUTA_CONSECUT_RT.RECIBO
+  // de la ruta y es el NUM_DEP de alCXC_ENC_DEP / alCXC_DET_DEP (una cuenta de banco por recibo).
+  // COBRO_PAGO.NUM_REC = número del recibo. COBRO_PAGO_DET.BANCO_CHEQUE = banco del cheque del
+  // cliente (texto libre, para el recibo y REF).
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE COBRO_PAGO ADD COLUMN NUM_REC TEXT;
+      ALTER TABLE COBRO_PAGO_DET ADD COLUMN BANCO_CHEQUE TEXT;
+    `);
+  },
+
+  // v21: pagos con recibo pero NUM_REC vacío: se rellena con el NUM_DEP de su recibo (alCXC_ENC_DEP
+  // con ORIGEN 'RECIBO'), que es el mismo correlativo (RERT_<ruta>_<n>).
+  async (db) => {
+    await db.execAsync(`
+      UPDATE COBRO_PAGO
+         SET NUM_REC = (
+           SELECT e.NUM_DEP FROM COBRO_PAGO_DET d
+             JOIN alCXC_ENC_DEP e
+               ON e.COD_CIA = d.DEP_CIA AND e.COD_BCO = d.DEP_BCO AND e.CTA_BCO = d.DEP_CTA AND e.NUM_DEP = d.DEP_NUM
+            WHERE d.ID_PAGO = COBRO_PAGO.ID AND e.ORIGEN = 'RECIBO'
+            LIMIT 1)
+       WHERE COALESCE(NUM_REC, '') = '';
+    `);
+  },
+
+  // v22: DOC_PRO del recibo (GET /fr/sync/recibosPendientes): 'N' = pendiente, control aún no lo
+  // aplica en el ERP (se sigue descontando del saldo); 'S' = aplicado. Los recibos del equipo arrancan 'N'.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE alCXC_ENC_DEP ADD COLUMN DOC_PRO TEXT;
+      UPDATE alCXC_ENC_DEP SET DOC_PRO = 'N' WHERE ORIGEN = 'RECIBO';
+    `);
+  },
 ];
