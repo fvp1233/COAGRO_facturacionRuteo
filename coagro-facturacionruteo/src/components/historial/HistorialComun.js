@@ -1,5 +1,6 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatFechaDoc, formatMonto } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
@@ -30,6 +31,10 @@ export const formatFechaHora = (v) => {
   return `${formatFechaDoc(v)}${hora ? ` ${hora}` : ''}`;
 };
 
+// Llaves de pedidos y facturas del historial (compañía + número).
+export const clavePedido = (p) => `${p.compania}|${p.numero}`;
+export const claveFactura = (f) => `${f.compania}|${f.numero}`;
+
 // Etiqueta de color (ANULADA, Pendiente, Facturado, Facturada...). tono: 'rojo' | 'ambar' | 'verde'.
 export function Etiqueta({ texto, tono = 'rojo', style }) {
   return (
@@ -39,32 +44,31 @@ export function Etiqueta({ texto, tono = 'rojo', style }) {
   );
 }
 
-// Tarjeta del cliente con la fecha de la última descarga y el botón de actualizar (deshabilitado
-// mientras hay una consulta en curso).
-export function ClienteHistorialCard({ cliente, ruta, descargado, consultando, onActualizar }) {
+// Estado del pedido (EST_PED): 'F' facturado; cualquier otro, pendiente.
+export function EtiquetaEstadoPedido({ estado, style }) {
+  return estado === 'F' ? (
+    <Etiqueta texto="Facturado" tono="verde" style={style} />
+  ) : (
+    <Etiqueta texto="Pendiente" tono="ambar" style={style} />
+  );
+}
+
+// Distintivo rojo de factura anulada.
+export function BadgeAnulada({ style }) {
+  return <Etiqueta texto="ANULADA" tono="rojo" style={style} />;
+}
+
+// Tarjeta del cliente con la fecha de la última descarga (Datos > Cargar datos).
+export function ClienteHistorialCard({ cliente, ruta, descargado }) {
   return (
     <View style={styles.infoCard}>
-      <View style={styles.infoTexts}>
-        <Text style={styles.clientName} numberOfLines={1}>{cliente.nombre}</Text>
-        <Text style={styles.clientMeta} numberOfLines={1}>
-          {cliente.codigo}{ruta ? ` · Ruta ${ruta}` : ''}
-        </Text>
-        {descargado ? (
-          <Text style={styles.clientMeta} numberOfLines={1}>Actualizado: {formatDescarga(descargado)}</Text>
-        ) : null}
-      </View>
-      <Pressable
-        onPress={onActualizar}
-        disabled={consultando}
-        hitSlop={8}
-        style={({ pressed }) => [styles.refresh, (pressed || consultando) && styles.pressed]}
-      >
-        {consultando ? (
-          <ActivityIndicator size="small" color={ACCENT} />
-        ) : (
-          <Feather name="refresh-cw" size={18} color={ACCENT} />
-        )}
-      </Pressable>
+      <Text style={styles.clientName} numberOfLines={1}>{cliente.nombre}</Text>
+      <Text style={styles.clientMeta} numberOfLines={1}>
+        {cliente.codigo}{ruta ? ` · Ruta ${ruta}` : ''}
+      </Text>
+      {descargado ? (
+        <Text style={styles.clientMeta} numberOfLines={1}>Actualizado: {formatDescarga(descargado)}</Text>
+      ) : null}
     </View>
   );
 }
@@ -74,20 +78,6 @@ export function Dato({ label, value }) {
     <View style={styles.dato}>
       <Text style={styles.datoLabel}>{label}</Text>
       <Text style={styles.datoValor} selectable>{value || '—'}</Text>
-    </View>
-  );
-}
-
-// Encabezado del documento seleccionado: tipo, etiquetas, número y datos (children).
-export function EncabezadoDocumento({ tipo, numero, etiquetas, children }) {
-  return (
-    <View style={styles.detalleHeader}>
-      <View style={styles.detalleTituloRow}>
-        <Text style={styles.detalleTitulo}>{tipo}</Text>
-        {etiquetas}
-      </View>
-      <Text style={styles.numero} selectable>{numero}</Text>
-      <View style={styles.datos}>{children}</View>
     </View>
   );
 }
@@ -122,6 +112,35 @@ export function MontosCard({ montos, aviso, tachado = false }) {
   );
 }
 
+// Popup (hoja desde abajo) con el detalle de un documento del historial. Se cierra con la X, tocando
+// fuera o con el botón atrás. tipo: 'PEDIDO' | 'FACTURA'; etiquetas: nodo junto al tipo (estado,
+// ANULADA...); children: contenido desplazable (total, datos, pestañas...).
+export function DetalleSheet({ visible, tipo, numero, etiquetas, onClose, children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetTitulo}>
+              <View style={styles.sheetTipoRow}>
+                <Text style={historialStyles.seccionLabel}>{tipo}</Text>
+                {etiquetas}
+              </View>
+              <Text style={styles.sheetNumero} selectable>{numero}</Text>
+            </View>
+            <Pressable onPress={onClose} hitSlop={10}>
+              <Feather name="x" size={22} color={colors.textMuted} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.sheetContent}>{children}</ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // Estilos comunes de las vistas de historial.
 export const historialStyles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
@@ -132,29 +151,88 @@ export const historialStyles = StyleSheet.create({
   detalle: { gap: spacing.sm },
   avisoText: { fontSize: 13, color: colors.textMuted },
   avisoError: { fontSize: 13, color: colors.error },
+  seccionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: colors.textMuted },
+  // Lista de cards de documentos y card compacta (línea izquierda de color = estado).
+  lista: { gap: spacing.sm + 2 },
+  contador: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 4,
+    paddingVertical: spacing.sm + 4,
+    paddingLeft: spacing.sm + 4,
+    paddingRight: spacing.sm,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  cardTexts: { flex: 1 },
+  cardNumero: { fontSize: 15, fontWeight: '700', color: colors.text },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' },
+  cardMetaText: { fontSize: 12, color: colors.textMuted },
+  cardDerecha: { alignItems: 'flex-end', gap: 2 },
+  cardTotal: { fontSize: 16, fontWeight: '800', color: colors.text },
+  cardEstado: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  pressed: { opacity: 0.7 },
+  empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  printButton: {
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  printText: { fontSize: 15, fontWeight: '700', color: colors.onPrimary },
+  // Contenido del popup de detalle.
+  sheetTotal: { alignItems: 'center' },
+  sheetTotalValor: { fontSize: 28, fontWeight: '800', color: colors.text, marginTop: 2 },
+  datos: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
+  },
 });
 
 const styles = StyleSheet.create({
-  infoCard: {
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    maxHeight: '90%',
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md + 4,
+  },
+  sheetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md + 4,
+    paddingBottom: spacing.sm,
+  },
+  sheetTitulo: { flex: 1 },
+  sheetTipoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sheetNumero: { fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 2 },
+  sheetContent: { paddingHorizontal: spacing.md + 4, paddingTop: spacing.xs, gap: spacing.md },
+  infoCard: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
   },
-  infoTexts: { flex: 1 },
   clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
   clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  refresh: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: { opacity: 0.6 },
   etiqueta: {
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
@@ -165,19 +243,6 @@ const styles = StyleSheet.create({
   ambar: { backgroundColor: colors.warning },
   verde: { backgroundColor: colors.success },
   etiquetaText: { fontSize: 10, fontWeight: '800', color: colors.onPrimary, letterSpacing: 0.5 },
-  detalleHeader: {
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  detalleTituloRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  detalleTitulo: { fontSize: 12, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
-  numero: { fontSize: 15, fontWeight: '700', color: colors.text },
-  datos: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
-  dato: { minWidth: 120 },
-  datoLabel: { fontSize: 11, color: colors.textMuted },
-  datoValor: { fontSize: 13, fontWeight: '600', color: colors.text },
   tabs: {
     flexDirection: 'row',
     backgroundColor: colors.background,

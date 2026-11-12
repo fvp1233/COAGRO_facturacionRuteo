@@ -10,11 +10,13 @@ import { descargarCobros, descargarCobrosAgente } from '../services/syncCobros';
 import { descargarConsecutivos } from '../services/syncConsecutivos';
 import { descargarCotizaciones } from '../services/syncCotizaciones';
 import { descargarLotes } from '../services/syncLotes';
+import { descargarCuentasBanco } from '../services/syncCuentasBanco';
 import { descargarHistorialPedidosRuta } from '../services/historialPedidos';
 import { descargarHistorialFacturasRuta } from '../services/historialFacturas';
 import { getDatabase } from '../db/database';
 import { refrescarSesion } from '../services/mobileAuth';
 import { contarPendientes, enviarPendientes, limpiarEnviados } from '../services/enviarDatos';
+import { descargarRecibosPendientes } from '../services/syncRecibos';
 import { isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
@@ -146,13 +148,16 @@ export default function DatosScreen({ module, onBack }) {
         cotizaciones: await descargarCotizaciones(),
         historialPedidos: await descargarHistorialPedidosRuta(),
         historialFacturas: await descargarHistorialFacturasRuta(),
+        cuentasBanco: await descargarCuentasBanco(),
+        // Va al final: cuadra los recibos del equipo con los pendientes del servidor (DOC_PRO = 'N').
+        recibos: await descargarRecibosPendientes(),
       };
       const db = await getDatabase();
       await db.withTransactionAsync(async () => {
         await limpiarEnviados(db);
         for (const d of Object.values(descargas)) await d.guardar(db);
       });
-      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas } =
+      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, recibos } =
         Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
@@ -168,6 +173,8 @@ export default function DatosScreen({ module, onBack }) {
         cotizaciones: cotizaciones.cotizaciones,
         historialPedidos: historialPedidos.pedidos,
         historialFacturas: historialFacturas.facturas,
+        cuentasBanco: cuentasBanco.cuentas,
+        recibosPendientes: recibos.recibos,
         omitidos:
           clientes.omitidos +
           clientesCia.omitidos +
@@ -178,7 +185,9 @@ export default function DatosScreen({ module, onBack }) {
           consecutivos.omitidos +
           cotizaciones.omitidos +
           historialPedidos.omitidos +
-          historialFacturas.omitidos,
+          historialFacturas.omitidos +
+          cuentasBanco.omitidos +
+          recibos.omitidos,
       });
     } catch (e) {
       mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
@@ -256,7 +265,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas, {resumen.cuentasBanco} cuentas de banco, {resumen.recibosPendientes} recibos pendientes de aplicar.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>

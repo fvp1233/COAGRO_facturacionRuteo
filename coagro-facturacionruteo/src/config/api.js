@@ -7,8 +7,8 @@ export const API_PREFIX = '/api/v1';
 
 // Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
 // Con null se usa el servidor guardado en la pantalla de Conexión.
-export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
-// export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
+//export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
+ export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
 //export const BASE_URL = null;
 
 // /fr/mobile/registro y /fr/mobile/login no llevan token; el resto exige el token de la app
@@ -34,14 +34,14 @@ export const PATHS = {
   syncCotizaciones: '/fr/sync/cotizaciones',
   // Existencias por lote (ARTICULO_EXISTENCIA_LOTE) de las bodegas de la handheld.
   syncLotes: '/fr/sync/lotes',
-  // Historial de PEDIDOS y de FACTURAS del ERP de UN cliente en las rutas de la handheld (encabezado,
-  // líneas y montos calculados). Se piden en línea al consultarlos; no van en Cargar datos.
-  historialPedidos: (cliente) => `/fr/sync/historialPedidos?cliente=${encodeURIComponent(cliente)}`,
-  historialFacturas: (cliente) => `/fr/sync/historialFacturas?cliente=${encodeURIComponent(cliente)}`,
-  // Los mismos historiales de TODOS los clientes de las rutas de la handheld (últimos meses), para
-  // Cargar datos (consulta sin conexión).
+  // Historial de PEDIDOS y de FACTURAS del ERP de TODOS los clientes de las rutas de la handheld
+  // (últimos meses), para Cargar datos (consulta sin conexión).
   syncHistorialPedidosRuta: '/fr/sync/historialPedidosRuta',
   syncHistorialFacturasRuta: '/fr/sync/historialFacturasRuta',
+  // Cuentas bancarias de la empresa (alCXC_CTA_BCO) donde se deposita / transfiere lo cobrado.
+  syncCuentasBanco: '/fr/sync/cuentasBanco',
+  // Recibos de cobro de la handheld que control aún no aplica en el ERP (DOC_PRO = 'N').
+  syncRecibosPendientes: '/fr/sync/recibosPendientes',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

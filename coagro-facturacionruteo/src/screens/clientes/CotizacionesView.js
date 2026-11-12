@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,19 +6,15 @@ import { StatusBar } from 'expo-status-bar';
 
 import AprobarCotizacionModal from '../../components/pedido/AprobarCotizacionModal';
 import CenteredHeader from '../../components/ui/CenteredHeader';
-import DataTable from '../../components/ui/DataTable';
+import Pagination from '../../components/ui/Pagination';
 import { aprobarCotizacion, getCotizacionesCliente } from '../../repositories/pedidos';
 import { isNetworkError } from '../../services/api';
 import { descargarCotizacionPdf } from '../../services/documentoPdf';
 import { formatFechaDoc, formatMontoMoneda } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
-const COLUMNS = [
-  { key: 'numero', title: 'Número', width: 110, grow: true },
-  { key: 'fechaTexto', title: 'Fecha', width: 80 },
-  { key: 'articulos', title: 'Art.', width: 50, align: 'right' },
-  { key: 'totalTexto', title: 'Total', width: 110, align: 'right' },
-];
+// Cotizaciones por página (el usuario puede elegir otro tamaño en la barra de paginación).
+const PAGE_SIZE = 10;
 
 const ACCENT = colors.primary;
 
@@ -28,9 +24,51 @@ const aFila = (c) => ({
   totalTexto: formatMontoMoneda(c.total, c.moneda),
 });
 
+// Card de una cotización (seleccionable): número, fecha, artículos y total. Línea izquierda verde si
+// ya está en el servidor (se puede imprimir) o naranja si solo está en el equipo.
+function CotizacionCard({ cotizacion, selected, onPress }) {
+  const { enviada } = cotizacion;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        selected && styles.cardSelected,
+        enviada ? styles.cardEnviada : styles.cardPendiente,
+        pressed && styles.cardPressed,
+      ]}
+    >
+      <View style={[styles.check, selected && styles.checkSelected]}>
+        {selected ? <Feather name="check" size={14} color={colors.onPrimary} /> : null}
+      </View>
+      <View style={styles.cardBody}>
+        <Text style={[styles.numero, selected && styles.numeroSelected]} numberOfLines={1}>
+          {cotizacion.numero}
+        </Text>
+        <View style={styles.meta}>
+          <Feather name="calendar" size={12} color={colors.textMuted} />
+          <Text style={styles.metaText}>{cotizacion.fechaTexto || '—'}</Text>
+        </View>
+        <View style={styles.meta}>
+          <Feather name="package" size={12} color={colors.textMuted} />
+          <Text style={styles.metaText}>
+            {cotizacion.articulos} {cotizacion.articulos === 1 ? 'artículo' : 'artículos'}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.cardDerecha}>
+        <Text style={styles.total}>{cotizacion.totalTexto}</Text>
+        <Text style={[styles.estado, enviada ? styles.estadoEnviada : styles.estadoPendiente]}>
+          {enviada ? 'ENVIADA' : 'SOLO EN EQUIPO'}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 // Validar cliente > Cotización: cotizaciones del cliente (capturadas en el equipo y descargadas en
-// Datos > Cargar datos). "Nueva" abre la captura (mismas pantallas del pedido); al seleccionar una
-// se puede aprobar: pasa a pedido (TIP_DOC 'F') con fecha de hoy y la entrega que se elija, o
+// Datos > Cargar datos), en cards paginadas. "Nueva" abre la captura (mismas pantallas del pedido);
+// al seleccionar una card (tocarla de nuevo quita la selección) se puede aprobar: pasa a pedido (TIP_DOC 'F') con fecha de hoy y la entrega que se elija, o
 // imprimir: descarga su PDF del backend (requiere internet y que la cotización ya esté enviada).
 // onNueva(): abrir la captura. onAprobada(numero): el contenedor registra la visita.
 export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onAprobada }) {
@@ -40,6 +78,9 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
   const [seleccionado, setSeleccionado] = useState(null);
   const [aprobar, setAprobar] = useState(false);
   const [generando, setGenerando] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const scrollRef = useRef(null);
 
   const cargar = useCallback(
     () =>
@@ -57,6 +98,22 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
   }, [cargar]);
 
   const cotizacion = cotizaciones.find((c) => c.numero === seleccionado) ?? null;
+
+  // Si al aprobar se vacía la última página, se vuelve a la anterior.
+  const totalPages = Math.max(1, Math.ceil(cotizaciones.length / pageSize));
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pagina = useMemo(
+    () => cotizaciones.slice((page - 1) * pageSize, page * pageSize),
+    [cotizaciones, page, pageSize]
+  );
+
+  const irAPagina = (n) => {
+    setPage(n);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
 
   const imprimir = async () => {
     if (!cotizacion || generando) return;
@@ -102,7 +159,7 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
       <StatusBar style="dark" />
       <CenteredHeader title="Cotizaciones" onBack={onBack} />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>
           <Text style={styles.clientName} numberOfLines={1}>{cliente.nombre}</Text>
           <Text style={styles.clientMeta} numberOfLines={1}>
@@ -110,15 +167,39 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
           </Text>
         </View>
 
-        <DataTable
-          columns={COLUMNS}
-          data={cotizaciones}
-          keyExtractor={(item) => item.numero}
-          onRowPress={(item) => setSeleccionado(item.numero)}
-          selectedKey={seleccionado}
-          emptyText="El cliente no tiene cotizaciones pendientes"
-        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {cotizaciones.length ? (
+          <>
+            <Text style={styles.contador}>
+              {cotizaciones.length} {cotizaciones.length === 1 ? 'cotización' : 'cotizaciones'}
+              {cotizacion ? ` · seleccionada ${cotizacion.numero}` : ' · toca una para seleccionarla'}
+            </Text>
+            {pagina.map((c) => (
+              <CotizacionCard
+                key={c.numero}
+                cotizacion={c}
+                selected={c.numero === seleccionado}
+                onPress={() => setSeleccionado((actual) => (actual === c.numero ? null : c.numero))}
+              />
+            ))}
+            <Pagination
+              page={Math.min(page, totalPages)}
+              pageSize={pageSize}
+              total={cotizaciones.length}
+              onPageChange={irAPagina}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                irAPagina(1);
+              }}
+            />
+          </>
+        ) : !error ? (
+          <View style={styles.empty}>
+            <Feather name="file-text" size={32} color={colors.textDisabled} />
+            <Text style={styles.emptyText}>El cliente no tiene cotizaciones pendientes. Usa "Nueva" para crear una.</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.bar}>
@@ -164,15 +245,61 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
-  content: { padding: spacing.md, gap: spacing.md },
+  content: { padding: spacing.md, gap: spacing.sm + 2 },
   infoCard: {
     backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
   },
   clientName: { fontSize: 15, fontWeight: '700', color: colors.text },
   clientMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   error: { fontSize: 12, color: colors.error },
+  contador: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 4,
+    padding: spacing.sm + 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  cardSelected: { borderColor: ACCENT, backgroundColor: '#FFF7F7' },
+  cardEnviada: { borderLeftColor: colors.success },
+  cardPendiente: { borderLeftColor: colors.warning },
+  cardPressed: { opacity: 0.85 },
+  check: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkSelected: { backgroundColor: ACCENT, borderColor: ACCENT },
+  cardBody: { flex: 1, gap: 3 },
+  numero: { fontSize: 15, fontWeight: '700', color: colors.text },
+  numeroSelected: { color: colors.primaryDark },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 12, color: colors.textMuted },
+  cardDerecha: { alignItems: 'flex-end', gap: 2 },
+  total: { fontSize: 16, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
+  estado: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  estadoEnviada: { color: colors.success },
+  estadoPendiente: { color: '#B85F00' },
+  empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   bar: {
     flexDirection: 'row',
     gap: spacing.sm,

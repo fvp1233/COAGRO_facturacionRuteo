@@ -12,6 +12,8 @@ import ClienteOpcionesView from './ClienteOpcionesView';
 import VisitaRegistroView from './VisitaRegistroView';
 import CobrosView from './CobrosView';
 import CobroDocumentosView from './CobroDocumentosView';
+import PagoView from './PagoView';
+import ReciboView from './ReciboView';
 import ConsultaCobrosView from './ConsultaCobrosView';
 import ConsultaPedidosView from './ConsultaPedidosView';
 import ConsultaFacturasView from './ConsultaFacturasView';
@@ -24,6 +26,7 @@ import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
 import { getDocumentosCobro } from '../../repositories/cobros';
 import { TIPOS_PEDIDO } from '../../repositories/pedidos';
+import { formatMonto } from '../../utils/formato';
 import { colors } from '../../theme';
 
 // Estado de visita (EFECT_VISITA_RT) con que se registra la visita al guardar un pedido.
@@ -57,6 +60,12 @@ export default function ClientesScreen({ onBack }) {
   const [opcionActiva, setOpcionActiva] = useState(null);
   // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
   const [cobro, setCobro] = useState(null);
+  // Pago en curso ({ documento, saldoTotal, saldoDocumento, totalAPagar }) tras tocar Pagar en un documento.
+  const [pago, setPago] = useState(null);
+  // Recibo abierto (ID de COBRO_PAGO) tras guardar un pago o desde los abonos anteriores.
+  const [reciboVer, setReciboVer] = useState(null);
+  // Filtro de Documentos a cobrar ('pendientes' | 'abonos'); se conserva al volver de un recibo.
+  const [filtroCobro, setFiltroCobro] = useState('pendientes');
   // Encabezado del pedido (o cotización) en curso tras continuar desde Pedido; abre la tabla de artículos.
   const [pedido, setPedido] = useState(null);
   // En Cotización: true = captura de una nueva; false = lista de cotizaciones del cliente.
@@ -103,7 +112,7 @@ export default function ClientesScreen({ onBack }) {
           <ValidarView
             onBack={onBack}
             refreshKey={refreshKey}
-            onSelectCliente={(cliente, ruta) => setSeleccion({ cliente, ruta })}
+            onSelectCliente={(cliente, ruta) => setSeleccion(cliente ? { cliente, ruta } : null)}
             initialRutaCodigo={seleccion?.ruta ?? null}
             initialSelectedCodigo={seleccion?.cliente.codigo ?? null}
           />
@@ -234,6 +243,40 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  // Recibo de un pago: recién guardado (vuelve a la lista de documentos) o de un abono anterior
+  // abierto desde la pantalla de pago (vuelve a ella).
+  if (validando && opcionActiva === 'cobros' && cobro && reciboVer) {
+    return <ReciboView idPago={reciboVer} onBack={() => setReciboVer(null)} />;
+  }
+
+  if (validando && opcionActiva === 'cobros' && cobro && pago) {
+    return (
+      <PagoView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        documento={pago.documento}
+        moneda={cobro.moneda}
+        saldoTotal={pago.saldoTotal}
+        saldoDocumento={pago.saldoDocumento}
+        totalAPagar={pago.totalAPagar}
+        onBack={() => setPago(null)}
+        onVerRecibo={setReciboVer}
+        onPagado={({ idPago, recibo, pagado, saldoPendiente }) => {
+          // El pago ya quedó en COBRO_PAGO; al volver, la lista de documentos lo descuenta del saldo.
+          const numero = pago.documento.documento;
+          setPago(null);
+          setReciboVer(idPago);
+          Alert.alert(
+            `Recibo ${recibo}`,
+            saldoPendiente > 0
+              ? `Se abonaron ${formatMonto(pagado)} al documento ${numero}. Quedan pendientes ${formatMonto(saldoPendiente)}.`
+              : `El documento ${numero} quedó pagado por completo (${formatMonto(pagado)}).`
+          );
+        }}
+      />
+    );
+  }
+
   if (validando && opcionActiva === 'cobros' && cobro) {
     return (
       <CobroDocumentosView
@@ -241,7 +284,14 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         moneda={cobro.moneda}
         tipoPago={cobro.tipoPago}
-        onBack={() => setCobro(null)}
+        onBack={() => {
+          setCobro(null);
+          setFiltroCobro('pendientes');
+        }}
+        onPagar={(documento, totales) => setPago({ documento, ...totales })}
+        onVerRecibo={setReciboVer}
+        filtro={filtroCobro}
+        onFiltroChange={setFiltroCobro}
       />
     );
   }

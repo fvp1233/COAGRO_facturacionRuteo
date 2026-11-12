@@ -97,33 +97,6 @@ async function insertarFacturas(db, historial, cliente = null) {
   }
 }
 
-// Pide al servidor el historial de facturas del cliente (requiere internet) y reemplaza su caché
-// local (HISTORIAL_FAC_ENC/DET) en UNA transacción: si algo falla, la caché queda como estaba.
-// Lanza ApiError si el servidor responde success: false (mensaje = errors[0]) o sin red.
-// La pantalla lee después la caché con repositories/historialFacturas.
-export async function actualizarHistorialCliente(cliente) {
-  const { historial } = leerHistorial(await getJson(PATHS.historialFacturas(cliente)));
-
-  const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
-    // Solo el historial de este cliente (sin merge): primero sus líneas, luego sus encabezados.
-    await db.runAsync(
-      `DELETE FROM HISTORIAL_FAC_DET
-        WHERE EXISTS (SELECT 1 FROM HISTORIAL_FAC_ENC e
-                       WHERE e.COD_CLT = ? AND e.COD_CIA = HISTORIAL_FAC_DET.COD_CIA
-                         AND e.NUM_FAC = HISTORIAL_FAC_DET.NUM_FAC)`,
-      [cliente]
-    );
-    await db.runAsync('DELETE FROM HISTORIAL_FAC_ENC WHERE COD_CLT = ?', [cliente]);
-    // Se guarda con el código consultado: la caché se reemplaza por ese código.
-    await insertarFacturas(db, historial, cliente);
-    await db.runAsync('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)', [
-      `historial_facturas_at:${cliente}`,
-      new Date().toISOString(),
-    ]);
-  });
-}
-
 // Historial de facturas de TODOS los clientes de las rutas de la handheld (últimos meses), para
 // Cargar datos. Solo descarga y valida: no toca la base. Devuelve { guardar(db), resumen };
 // DatosScreen llama guardar dentro de UNA transacción con el resto de la carga.

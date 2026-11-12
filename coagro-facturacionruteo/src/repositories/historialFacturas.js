@@ -44,31 +44,6 @@ export async function getHistorialCliente(cliente) {
   };
 }
 
-const CAMPOS_MONTOS = ['totalMercaderia', 'descuentoVolumen', 'subtotal', 'iva', 'granTotal'];
-
-// Montos de las facturas de un pedido, tomados de la caché de facturas del cliente (no se
-// recalculan: con varias facturas se suma cada monto, sin las anuladas).
-// Devuelve { montos (null si no hay vigentes), vigentes, anuladas, faltan } — faltan: números que
-// no están en la caché (hay que consultar al servidor).
-export async function getMontosFacturas(cliente, compania, numeros) {
-  const { facturas } = await getHistorialCliente(cliente);
-  const encontradas = numeros
-    .map((n) => facturas.find((f) => f.compania === (compania ?? '') && f.numero === n))
-    .filter(Boolean);
-  const vigentes = encontradas.filter((f) => !f.anulada);
-  const montos = vigentes.length
-    ? Object.fromEntries(
-        CAMPOS_MONTOS.map((k) => [k, vigentes.reduce((s, f) => s + Number(f.montos[k] ?? 0), 0)])
-      )
-    : null;
-  return {
-    montos,
-    vigentes: vigentes.map((f) => f.numero),
-    anuladas: encontradas.filter((f) => f.anulada).map((f) => f.numero),
-    faltan: numeros.filter((n) => !encontradas.some((f) => f.numero === n)),
-  };
-}
-
 // Líneas de una factura del historial (llave COD_CIA + NUM_FAC), por NUM_LN.
 // Nombre del artículo: ARTICULO.DES_ART (null si no está). total ya trae el descuento restado.
 export async function getLineasFactura(compania, numero) {
@@ -86,6 +61,7 @@ export async function getLineasFactura(compania, numero) {
     linea: r.NUM_LN,
     codigo: r.COD_ART,
     descripcion: r.DES_ART,
+    estBon: r.EST_BON,
     bonificacion: r.EST_BON === 'B',
     cantidad: r.CANT_FAC,
     devuelta: r.CANT_DEV,

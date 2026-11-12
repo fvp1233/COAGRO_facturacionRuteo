@@ -72,6 +72,7 @@ export async function getLineasPedido(compania, numero) {
     linea: r.NUM_LN,
     codigo: r.COD_ART,
     descripcion: r.DES_ART,
+    estBon: r.EST_BON,
     bonificacion: r.EST_BON === 'B',
     facturada: r.FACTURADA === 1,
     cantidad: r.CANTIDAD,
