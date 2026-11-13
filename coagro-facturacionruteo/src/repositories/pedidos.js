@@ -21,14 +21,15 @@ export const TIPOS_PEDIDO = {
 };
 
 // Datos para abrir un pedido: valores del cliente (CLIENTE_CIA, se descargan en Datos > Cargar
-// datos desde /fr/sync/clientesCia) y los catálogos para elegirlos. Cada opción es
-// { codigo, descripcion }; las de región llevan además `pais` (y `division1` las de región 2).
+// datos desde /fr/sync/clientes) y los catálogos para elegirlos. Cada opción es
+// { codigo, descripcion }; las de región llevan además `pais` (y `division1` las de región 2,
+// `division1` y `division2` las de región 3).
 // `cliente` es null si el cliente no tiene fila en CLIENTE_CIA.
 // Nivel de precio: CLIENTE.NIVEL_PRECIO del cliente en la ruta (llega en /fr/sync/clientes).
 export async function getDatosPedido(codigoCliente, ruta) {
   const db = await getDatabase();
   const cc = await db.getFirstAsync(
-    `SELECT cc.COD_PAIS, cc.DIVISION_GEOGRAFICA1, cc.DIVISION_GEOGRAFICA2, cc.COD_CND,
+    `SELECT cc.COD_PAIS, cc.DIVISION_GEOGRAFICA1, cc.DIVISION_GEOGRAFICA2, cc.DIVISION_GEOGRAFICA3, cc.COD_CND,
             cc.SUBTIPODOC, cc.CODIGO, cc.IND_MON, cc.DESCUENTO, cc.POR_EXC_VT, cc.POR_EXC_CS, c.NIVEL_PRECIO,
             cc.COD_CIA, cc.LST_PRE, cc.DIR_EMB_DEFAULT
        FROM CLIENTE_CIA cc
@@ -37,7 +38,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
     [ruta, codigoCliente]
   );
 
-  const [paises, divisiones1, divisiones2, condiciones, niveles, subtipos, actividades] = await Promise.all([
+  const [paises, divisiones1, divisiones2, divisiones3, condiciones, niveles, subtipos, actividades] = await Promise.all([
     db.getAllAsync(
       `SELECT COD_PAIS AS codigo, NOMBRE AS descripcion, ETIQUETA_DIV_GEO1 AS etiqueta1,
               ETIQUETA_DIV_GEO2 AS etiqueta2
@@ -51,6 +52,12 @@ export async function getDatosPedido(codigoCliente, ruta) {
       `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS codigo,
               NOMBRE AS descripcion
          FROM DIVISION_GEOGRAFICA2 ORDER BY NOMBRE`
+    ),
+    // Distritos: vacío mientras el servidor no mande el catálogo (divisiones3).
+    db.getAllAsync(
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS division2,
+              DIVISION_GEOGRAFICA3 AS codigo, NOMBRE AS descripcion
+         FROM DIVISION_GEOGRAFICA3 ORDER BY NOMBRE`
     ),
     db.getAllAsync('SELECT COD_CND AS codigo, DES_CND AS descripcion FROM alFAC_CND_PAG ORDER BY DES_CND'),
     // El nivel se identifica por nombre (NIVEL_PRECIO); un nombre con varias monedas sale una vez.
@@ -73,6 +80,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
           pais: cc.COD_PAIS,
           division1: cc.DIVISION_GEOGRAFICA1,
           division2: cc.DIVISION_GEOGRAFICA2,
+          division3: cc.DIVISION_GEOGRAFICA3,
           condicionPago: cc.COD_CND,
           nivelPrecio: cc.NIVEL_PRECIO,
           subtipo: cc.SUBTIPODOC,
@@ -90,6 +98,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
     paises,
     divisiones1,
     divisiones2,
+    divisiones3,
     condiciones,
     niveles,
     subtipos,
@@ -110,7 +119,7 @@ export function faltantesEncabezado(valores) {
 }
 
 // Encabezado que recibe PedidoArticulosView. datos = getDatosPedido; valores = lo elegido en
-// PedidoView (pais, division1, division2, condicionPago, nivelPrecio, subtipo, actividadComercial,
+// PedidoView (pais, division1, division2, division3, condicionPago, nivelPrecio, subtipo, actividadComercial,
 // creditoFiscal, sugeridoVenta, inicio).
 export function armarEncabezado(datos, valores) {
   const c = datos.cliente;
@@ -118,6 +127,8 @@ export function armarEncabezado(datos, valores) {
     pais: valores.pais,
     division1: valores.division1,
     division2: valores.division2,
+    // Distrito: solo para la pantalla; alFAC_ENC_PED no tiene columna para guardarlo.
+    division3: valores.division3 ?? null,
     condicionPago: valores.condicionPago,
     nivelPrecio: valores.nivelPrecio,
     subtipo: valores.subtipo,

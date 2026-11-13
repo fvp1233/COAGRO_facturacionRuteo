@@ -48,6 +48,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
   const [pais, setPais] = useState(null);
   const [division1, setDivision1] = useState(null);
   const [division2, setDivision2] = useState(null);
+  const [division3, setDivision3] = useState(null);
   const [condicionPago, setCondicionPago] = useState(null);
   const [nivelPrecio, setNivelPrecio] = useState(null);
   const [subtipo, setSubtipo] = useState(null);
@@ -71,6 +72,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
         setPais(c.pais);
         setDivision1(c.division1);
         setDivision2(c.division2);
+        setDivision3(c.division3 ?? null);
         setCondicionPago(c.condicionPago);
         setNivelPrecio(c.nivelPrecio);
         setSubtipo(c.subtipo);
@@ -90,7 +92,8 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
   const opciones = useMemo(() => {
     if (!datos) return null;
     const c = datos.cliente ?? {};
-    // Las regiones del cliente solo se conservan mientras sigan en su país / región 1.
+    // Las regiones del cliente solo se conservan mientras sigan en su país / región superior.
+    // Departamento -> municipio (por PAIS + DIVISION_GEOGRAFICA1) -> distrito (+ DIVISION_GEOGRAFICA2).
     const enPais = (o) => o.pais === pais;
     return {
       paises: conValorCliente(datos.paises, c.pais),
@@ -102,12 +105,18 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
         datos.divisiones2.filter((o) => enPais(o) && o.division1 === division1),
         pais === c.pais && division1 === c.division1 ? c.division2 : null
       ),
+      divisiones3: conValorCliente(
+        (datos.divisiones3 ?? []).filter(
+          (o) => enPais(o) && o.division1 === division1 && o.division2 === division2
+        ),
+        pais === c.pais && division1 === c.division1 && division2 === c.division2 ? c.division3 : null
+      ),
       condiciones: conValorCliente(datos.condiciones, c.condicionPago),
       niveles: conValorCliente(datos.niveles, c.nivelPrecio),
       subtipos: conValorCliente(datos.subtipos, c.subtipo),
       actividades: conValorCliente(datos.actividades, c.actividadComercial),
     };
-  }, [datos, pais, division1]);
+  }, [datos, pais, division1, division2]);
 
   // Etiquetas de región según el país (ETIQUETA_DIV_GEO1 / 2), p. ej. "Departamento" / "Municipio".
   const paisActual = datos?.paises.find((p) => p.codigo === pais);
@@ -119,12 +128,20 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
     setPais(codigo);
     setDivision1(null);
     setDivision2(null);
+    setDivision3(null);
   };
 
   const cambiarDivision1 = (codigo) => {
     if (codigo === division1) return;
     setDivision1(codigo);
     setDivision2(null);
+    setDivision3(null);
+  };
+
+  const cambiarDivision2 = (codigo) => {
+    if (codigo === division2) return;
+    setDivision2(codigo);
+    setDivision3(null);
   };
 
   const continuar = () => {
@@ -132,6 +149,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
       pais,
       division1,
       division2,
+      division3,
       condicionPago,
       nivelPrecio,
       subtipo,
@@ -183,8 +201,17 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
                 label={etiquetaRegion2}
                 opciones={opciones.divisiones2}
                 valor={division2}
-                onChange={setDivision2}
+                onChange={cambiarDivision2}
               />
+              {/* Distrito: se oculta mientras no haya catálogo (divisiones3) ni valor del cliente. */}
+              {opciones.divisiones3.length ? (
+                <Selector
+                  label="Distrito"
+                  opciones={opciones.divisiones3}
+                  valor={division3}
+                  onChange={setDivision3}
+                />
+              ) : null}
             </View>
 
             <View style={styles.card}>

@@ -2,7 +2,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme';
 
-export default function CenteredHeader({ title, subtitle = 'COAGRO FACTURACIÓN', onBack, onInfo }) {
+// Botón de la derecha: por defecto el ícono de información (onInfo). Con onRight se usa en su lugar
+// rightIcon (nombre de Feather, p. ej. 'edit-2') con rightColor; rightIcon null lo deja vacío.
+export default function CenteredHeader({
+  title,
+  subtitle = 'COAGRO FACTURACIÓN',
+  onBack,
+  onInfo,
+  onRight,
+  rightIcon,
+  rightColor = colors.text,
+}) {
   return (
     <View style={styles.container}>
       <Pressable onPress={onBack} hitSlop={10} style={styles.side}>
@@ -17,9 +27,15 @@ export default function CenteredHeader({ title, subtitle = 'COAGRO FACTURACIÓN'
         </View>
       </View>
 
-      <Pressable onPress={onInfo} hitSlop={10} style={[styles.side, styles.sideRight]}>
-        <Feather name="info" size={22} color={colors.text} />
-      </Pressable>
+      {onRight ? (
+        <Pressable onPress={rightIcon ? onRight : undefined} hitSlop={10} style={[styles.side, styles.sideRight]}>
+          {rightIcon ? <Feather name={rightIcon} size={22} color={rightColor} /> : null}
+        </Pressable>
+      ) : (
+        <Pressable onPress={onInfo} hitSlop={10} style={[styles.side, styles.sideRight]}>
+          <Feather name="info" size={22} color={colors.text} />
+        </Pressable>
+      )}
     </View>
   );
 }

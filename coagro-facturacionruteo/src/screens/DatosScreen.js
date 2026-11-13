@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { descargarClientes } from '../services/syncClientes';
-import { descargarClientesCia } from '../services/syncClientesCia';
 import { descargarArticulos } from '../services/syncArticulos';
 import { descargarCobros, descargarCobrosAgente } from '../services/syncCobros';
 import { descargarConsecutivos } from '../services/syncConsecutivos';
@@ -145,7 +144,6 @@ export default function DatosScreen({ module, onBack }) {
       // Cuando haya más tablas, se descargan aquí una tras otra. Nada se escribe todavía.
       const descargas = {
         clientes: await descargarClientes(),
-        clientesCia: await descargarClientesCia(),
         articulos: await descargarArticulos(),
         lotes: await descargarLotes(),
         cobros: await descargarCobros(),
@@ -174,13 +172,12 @@ export default function DatosScreen({ module, onBack }) {
         await limpiarEnviados(db);
         for (const d of Object.values(descargas)) await d.guardar(db);
       });
-      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas } =
+      const { clientes, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas } =
         Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
       setResumen({
         ...clientes,
-        clientesCia: clientesCia.clientesCia,
         articulos: articulos.articulos,
         precios: articulos.precios,
         lotes: lotes.lotes,
@@ -198,7 +195,6 @@ export default function DatosScreen({ module, onBack }) {
         metas: metas.metas,
         omitidos:
           clientes.omitidos +
-          clientesCia.omitidos +
           articulos.omitidos +
           lotes.omitidos +
           cobros.omitidos +

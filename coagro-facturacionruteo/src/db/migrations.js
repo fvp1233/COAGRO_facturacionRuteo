@@ -633,4 +633,66 @@ export const migrations = [
        WHERE p.ENVIADO = 0;
     `);
   },
+
+  // v28: tercera división geográfica (distrito, hija del municipio). CLIENTE_CIA.DIVISION_GEOGRAFICA3
+  // llega en /fr/sync/clientes; el catálogo (divisiones3) todavía no lo manda el servidor: la tabla
+  // queda vacía hasta que llegue.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE CLIENTE_CIA ADD COLUMN DIVISION_GEOGRAFICA3 TEXT;
+      CREATE TABLE IF NOT EXISTS DIVISION_GEOGRAFICA3 (
+        "PAIS" TEXT NOT NULL,
+        "COMPANIA" TEXT,
+        "DIVISION_GEOGRAFICA1" TEXT NOT NULL,
+        "DIVISION_GEOGRAFICA2" TEXT NOT NULL,
+        "DIVISION_GEOGRAFICA3" TEXT NOT NULL,
+        "NOMBRE" TEXT NOT NULL,
+        PRIMARY KEY ("PAIS", "DIVISION_GEOGRAFICA1", "DIVISION_GEOGRAFICA2", "DIVISION_GEOGRAFICA3")
+      );
+    `);
+  },
+
+  // v29: actividad (código y descripción) y encargados de compras y de pagos (nombre y teléfono) del
+  // cliente para Consultar > Cliente. Mismos nombres que erpadmin.CLIENTE_CIA; llegan en
+  // /fr/sync/clientes junto con el resto de CLIENTE_CIA y pueden venir null.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE CLIENTE_CIA ADD COLUMN codActividad TEXT;
+      ALTER TABLE CLIENTE_CIA ADD COLUMN desActividad TEXT;
+      ALTER TABLE CLIENTE_CIA ADD COLUMN nomEncargadoCompras TEXT;
+      ALTER TABLE CLIENTE_CIA ADD COLUMN telEncargadoCompras TEXT;
+      ALTER TABLE CLIENTE_CIA ADD COLUMN nomEncargadoPagos TEXT;
+      ALTER TABLE CLIENTE_CIA ADD COLUMN telEncargadoPagos TEXT;
+    `);
+  },
+
+  // v30: cambios a los datos del cliente hechos en Consultar > Cliente, pendientes de enviar al
+  // servidor (POST /fr/sync/enviar, arreglo cambiosCliente). El cambio ya se aplicó en CLIENTE /
+  // CLIENTE_CIA / alFAC_RUTA_ORDEN; aquí queda el registro para el envío. Un campo editado varias
+  // veces antes de enviar deja una sola fila (el último valor; VALOR_ANTERIOR es el original).
+  // RUTA: la ruta del cliente para DIAS_VISITA; '' para los campos que son del cliente.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS CLIENTE_CAMBIO (
+        "COD_CLT" TEXT NOT NULL,
+        "CAMPO" TEXT NOT NULL,
+        "RUTA" TEXT NOT NULL DEFAULT '',
+        "COD_CIA" TEXT,
+        "TABLA" TEXT NOT NULL,
+        "VALOR_ANTERIOR" TEXT,
+        "VALOR_NUEVO" TEXT,
+        "FECHA" TEXT NOT NULL,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        PRIMARY KEY ("COD_CLT", "CAMPO", "RUTA")
+      );
+    `);
+  },
+
+  // v31: los días de visita ya no se editan en el equipo (son de la ruta). Se descartan los cambios
+  // de días que hubieran quedado sin enviar; "Cargar datos" vuelve a traer los días del servidor.
+  async (db) => {
+    await db.runAsync("DELETE FROM CLIENTE_CAMBIO WHERE CAMPO = 'DIAS_VISITA'");
+  },
 ];

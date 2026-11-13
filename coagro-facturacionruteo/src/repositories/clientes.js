@@ -59,7 +59,7 @@ export async function getClientesRuta({ ruta, dia = null, estado = 'Todos' }) {
 const NOMBRE_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 // Ficha de consulta del cliente en una ruta: CLIENTE (datos básicos), CLIENTE_CIA (datos
-// comerciales), alFAC_TIP_CLT (tipo), alFAC_RUTA_ORDEN (días de visita) y alCXC_PEN_COB
+// comerciales), alFAC_TIP_CLT (tipo), ACTIVIDAD_COMERCIAL (descripción de la actividad), alFAC_RUTA_ORDEN (días de visita) y alCXC_PEN_COB
 // (facturas pendientes). Los datos comerciales son null si el cliente no tiene fila en
 // CLIENTE_CIA o si su tipo no está en el catálogo.
 // Nivel de precio: CLIENTE.NIVEL_PRECIO (llega en /fr/sync/clientes).
@@ -67,10 +67,29 @@ export async function getClienteConsulta(cliente, ruta) {
   const db = await getDatabase();
   const c = await db.getFirstAsync(
     `SELECT c.COD_CLT, c.NOM_CLT, c.DIR_CLT,
-            cc.COD_CLT AS CIA_CLT, cc.NOM_CTO, cc.NUM_TEL, t.DES_TIP_CL, c.NIVEL_PRECIO, cc.DIA_CRE, cc.LIM_CRE,
-            cc.POR_EXC_VT, cc.POR_EXC_CS, cc.IND_MON, cc.DESCUENTO
+            cc.COD_CLT AS CIA_CLT, cc.NOM_CTO, cc.NUM_TEL, cc.COD_TIP_CL, t.DES_TIP_CL, c.NIVEL_PRECIO, cc.DIA_CRE, cc.LIM_CRE,
+            cc.POR_EXC_VT, cc.POR_EXC_CS, cc.IND_MON, cc.DESCUENTO,
+            COALESCE(NULLIF(TRIM(cc.codActividad), ''), cc.CODIGO) AS COD_ACTIVIDAD,
+            COALESCE(NULLIF(TRIM(cc.desActividad), ''), a.descripcion) AS DES_ACTIVIDAD,
+            cc.codActividad, cc.desActividad,
+            cc.nomEncargadoCompras, cc.telEncargadoCompras, cc.nomEncargadoPagos, cc.telEncargadoPagos,
+            cc.COD_PAIS, p.ETIQUETA_DIV_GEO1, p.ETIQUETA_DIV_GEO2,
+            cc.DIVISION_GEOGRAFICA1, d1.NOMBRE AS NOM_DIV1,
+            cc.DIVISION_GEOGRAFICA2, d2.NOMBRE AS NOM_DIV2,
+            cc.DIVISION_GEOGRAFICA3, d3.NOMBRE AS NOM_DIV3
        FROM CLIENTE c
        LEFT JOIN CLIENTE_CIA cc ON cc.COD_CLT = c.COD_CLT
+       LEFT JOIN alFAC_PAIS p ON p.COD_PAIS = cc.COD_PAIS
+       LEFT JOIN DIVISION_GEOGRAFICA1 d1
+              ON d1.PAIS = cc.COD_PAIS AND d1.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+       LEFT JOIN DIVISION_GEOGRAFICA2 d2
+              ON d2.PAIS = cc.COD_PAIS AND d2.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+             AND d2.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
+       LEFT JOIN DIVISION_GEOGRAFICA3 d3
+              ON d3.PAIS = cc.COD_PAIS AND d3.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+             AND d3.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
+             AND d3.DIVISION_GEOGRAFICA3 = cc.DIVISION_GEOGRAFICA3
+       LEFT JOIN ACTIVIDAD_COMERCIAL a ON TRIM(a.codigo) = TRIM(cc.CODIGO)
        LEFT JOIN (SELECT COD_TIP_CL, MIN(DES_TIP_CL) AS DES_TIP_CL FROM alFAC_TIP_CLT GROUP BY COD_TIP_CL) t
               ON t.COD_TIP_CL = cc.COD_TIP_CL
       WHERE c.COD_CLT = ? AND c.COD_ZON = ?`,
@@ -98,6 +117,9 @@ export async function getClienteConsulta(cliente, ruta) {
     contacto: c.NOM_CTO,
     telefono: c.NUM_TEL,
     tipoCliente: c.DES_TIP_CL,
+    // Códigos crudos para editar (Consultar > Cliente): tipo de cliente y días de visita (1-7).
+    tipoClienteCodigo: c.COD_TIP_CL,
+    diasVisitaCodigos: dias.map((d) => Number(d.DIA)),
     nivelPrecio: c.NIVEL_PRECIO,
     diasVisita: dias.map((d) => NOMBRE_DIA[Number(d.DIA) - 1] ?? String(d.DIA)),
     diasCredito: c.DIA_CRE,
@@ -107,6 +129,28 @@ export async function getClienteConsulta(cliente, ruta) {
     facturasPendientes: (pendientes?.n ?? 0) > 0,
     moneda: c.IND_MON,
     descuento: c.DESCUENTO,
+    // Actividad: codActividad / desActividad de CLIENTE_CIA; si vienen vacíos, CODIGO y el catálogo
+    // ACTIVIDAD_COMERCIAL. Encargados: null mientras el ERP no los tenga (la vista muestra "No disponible").
+    actividadCodigo: c.COD_ACTIVIDAD,
+    actividadDescripcion: c.DES_ACTIVIDAD,
+    // Valores propios de CLIENTE_CIA (sin el respaldo de CODIGO / catálogo): los que se editan.
+    // Divisiones geográficas (departamento, municipio, distrito) dentro del país del cliente.
+    // Etiquetas del país (alFAC_PAIS) si las tiene.
+    pais: c.COD_PAIS,
+    etiquetaDivision1: c.ETIQUETA_DIV_GEO1,
+    etiquetaDivision2: c.ETIQUETA_DIV_GEO2,
+    division1: c.DIVISION_GEOGRAFICA1,
+    nombreDivision1: c.NOM_DIV1,
+    division2: c.DIVISION_GEOGRAFICA2,
+    nombreDivision2: c.NOM_DIV2,
+    division3: c.DIVISION_GEOGRAFICA3,
+    nombreDivision3: c.NOM_DIV3,
+    actividadCodigoPropio: c.codActividad,
+    actividadDescripcionPropia: c.desActividad,
+    encargadoCompras: c.nomEncargadoCompras,
+    telefonoCompras: c.telEncargadoCompras,
+    encargadoPagos: c.nomEncargadoPagos,
+    telefonoPagos: c.telEncargadoPagos,
   };
 }
 

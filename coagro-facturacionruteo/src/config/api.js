@@ -24,7 +24,6 @@ export const PATHS = {
   cotizacionPdf: (cia, pedido) =>
     `/fr/mobile/cotizacion/${encodeURIComponent(cia)}/${encodeURIComponent(pedido)}/pdf`,
   syncClientes: '/fr/sync/clientes',
-  syncClientesCia: '/fr/sync/clientesCia',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
   // Pendientes de cobro solo del agente (vendedor) del token.

@@ -3,10 +3,11 @@ import { getDatabase } from '../db/database';
 import { toSqlLocal } from '../repositories/visitas';
 import { leerDepositosPendientes, marcarPagosEnviados } from '../repositories/depositos';
 import { PATHS, TIMEOUT_ENVIO_MS } from '../config/api';
+import { CAMPOS_CLIENTE } from '../repositories/clienteCambios';
 
 // Envío al servidor (POST /fr/sync/enviar) de lo registrado en el equipo: ubicaciones de clientes,
-// visitas (con su GPS), pedidos (encabezado + líneas), aprobaciones de cotizaciones y el consecutivo
-// de pedidos de cada ruta.
+// visitas (con su GPS), pedidos (encabezado + líneas), aprobaciones de cotizaciones, cambios a los
+// datos de clientes (Consultar > Cliente) y el consecutivo de pedidos de cada ruta.
 // "Cargar datos" borra las tablas locales y las vuelve a llenar, así que esto va ANTES de cargar.
 // El servidor no duplica: reenviar lo mismo es seguro.
 
@@ -17,7 +18,7 @@ const fechaSql = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v} 00:00:00` : 
 const numero = (v) => (v == null || v === '' ? null : Number(v));
 
 // Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, depositos,
-// promocionales, consecutivos, total }).
+// promocionales, cambiosCliente, consecutivos, total }).
 // Depósitos = alCXC_ENC_DEP sin enviar (el efectivo y los cheques aún sin depositar no cuentan).
 export async function contarPendientes() {
   const db = await getDatabase();
@@ -28,6 +29,7 @@ export async function contarPendientes() {
   const aprobaciones = await cuenta('COTIZACION_APROBACION');
   const depositos = (await leerDepositosPendientes(db)).length;
   const promocionales = await cuenta('PROMOCIONAL');
+  const cambiosCliente = await cuenta('CLIENTE_CAMBIO');
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos = flag?.value === '1' ? 1 : 0;
   return {
@@ -37,8 +39,9 @@ export async function contarPendientes() {
     aprobaciones,
     depositos,
     promocionales,
+    cambiosCliente,
     consecutivos,
-    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + promocionales + consecutivos,
+    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + promocionales + cambiosCliente + consecutivos,
   };
 }
 
@@ -192,16 +195,46 @@ async function leerPendientes(db) {
     FECHA_REQUERIDA: fechaSql(p.FECHA_REQUERIDA),
   }));
 
-  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, promocionales, consecutivos };
+  // Cambios a datos de clientes (Consultar > Cliente): uno por cliente + campo.
+  // VALOR va con su tipo: número en los numéricos, texto en el resto ('' = vaciar el dato). FECHA identifica la versión: si se vuelve a editar mientras se envía,
+  // el cambio nuevo queda pendiente.
+  const filasCambio = await db.getAllAsync(
+    `SELECT COD_CLT, CAMPO, RUTA, COD_CIA, TABLA, VALOR_ANTERIOR, VALOR_NUEVO, FECHA
+       FROM CLIENTE_CAMBIO WHERE ENVIADO = 0
+      ORDER BY FECHA`
+  );
+  const valorEnvio = (campo, v) => {
+    const tipo = CAMPOS_CLIENTE[campo]?.tipo;
+    if (v == null) return null;
+    if (tipo === 'entero' || tipo === 'numero' || tipo === 'porcentaje') return numero(v);
+    return v;
+  };
+  const cambiosCliente = filasCambio.map((c) => ({
+    COD_CLT: c.COD_CLT,
+    COD_CIA: c.COD_CIA,
+    RUTA: c.RUTA || null,
+    TABLA: c.TABLA,
+    CAMPO: c.CAMPO,
+    VALOR: valorEnvio(c.CAMPO, c.VALOR_NUEVO),
+    VALOR_ANTERIOR: valorEnvio(c.CAMPO, c.VALOR_ANTERIOR),
+    FECHA: fechaSql(c.FECHA),
+  }));
+
+  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, promocionales, cambiosCliente, consecutivos };
 }
 
 // Envía todo lo pendiente y marca como enviado lo que el servidor guardó (ok, o duplicado de un envío
 // anterior). Lo que falla queda pendiente con su ERROR_ENVIO.
 // Devuelve { enviados, errores: [{ tipo, registro, error }] }; errores vacío = todo quedó en el servidor.
 // Lanza ApiError si el request entero falla (sin red, timeout, 5xx, success: false): no se marca nada.
-export async function enviarPendientes() {
+// solo: nombre de un arreglo (p. ej. 'cambiosCliente') para enviar únicamente eso; el resto va vacío
+// y queda pendiente para Datos > Enviar datos.
+export async function enviarPendientes({ solo } = {}) {
   const db = await getDatabase();
   const datos = await leerPendientes(db);
+  if (solo) {
+    for (const k of Object.keys(datos)) if (k !== solo) datos[k] = [];
+  }
   const total =
     datos.ubicaciones.length +
     datos.visitas.length +
@@ -209,6 +242,7 @@ export async function enviarPendientes() {
     datos.aprobaciones.length +
     datos.depositos.length +
     datos.promocionales.length +
+    datos.cambiosCliente.length +
     datos.consecutivos.length;
   if (!total) return { enviados: 0, errores: [] };
 
@@ -219,6 +253,7 @@ export async function enviarPendientes() {
   // Como depositos: solo se exige en la respuesta si se mandó alguna (un backend sin promocionales
   // sigue funcionando mientras no haya solicitudes nuevas).
   if (datos.promocionales.length) claves.push('promocionales');
+  if (datos.cambiosCliente.length) claves.push('cambiosCliente');
   if (!r || !claves.every((k) => Array.isArray(r[k]))) {
     throw new ApiError('La respuesta del servidor al envío no tiene el formato esperado.');
   }
@@ -313,6 +348,18 @@ export async function enviarPendientes() {
         );
       }
     );
+    await procesar(
+      'Cambio de cliente',
+      datos.cambiosCliente,
+      r.cambiosCliente ?? [],
+      (c) => `Cliente ${c.COD_CLT}: ${CAMPOS_CLIENTE[c.CAMPO]?.etiqueta ?? c.CAMPO}`,
+      marcarEn('CLIENTE_CAMBIO', "COD_CLT = ? AND CAMPO = ? AND RUTA = ? AND FECHA = ?", (c) => [
+        c.COD_CLT,
+        c.CAMPO,
+        c.RUTA ?? '',
+        c.FECHA,
+      ])
+    );
     let consecutivosOk = true;
     await procesar(
       'Consecutivo',
@@ -345,6 +392,8 @@ export async function limpiarEnviados(db) {
   );
   await db.runAsync('DELETE FROM alFAC_ENC_PED WHERE ENVIADO = 1');
   await db.runAsync('DELETE FROM COTIZACION_APROBACION WHERE ENVIADO = 1');
+  // Los cambios de clientes ya enviados vienen aplicados en la descarga de /fr/sync/clientes.
+  await db.runAsync('DELETE FROM CLIENTE_CAMBIO WHERE ENVIADO = 1');
   await db.runAsync("DELETE FROM VISITA WHERE ENVIADO = 1 AND date(INICIO) < date('now', 'localtime')");
   await db.runAsync(
     `DELETE FROM VISITA_UBICACION
