@@ -19,9 +19,9 @@ export const MODULES = [
   },
   {
     id: 'presupuesto',
-    title: 'Presupuesto',
-    subtitle: 'Metas y avance de ventas',
-    icon: { family: 'MaterialCommunityIcons', name: 'calculator-variant' },
+    title: 'Metas',
+    subtitle: 'Cómo voy con mis metas de venta',
+    icon: { family: 'MaterialCommunityIcons', name: 'bullseye-arrow' },
     badge: { label: 'Activo', dot: true },
     palette: {
       accent: colors.primary,

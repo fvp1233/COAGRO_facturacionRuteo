@@ -1,6 +1,7 @@
 import { getDatabase } from '../db/database';
 import { toSqlLocal } from './visitas';
 import { siguienteConsecutivo } from './pedidos';
+import { ACTIVIDAD, anotarActividad, quitarActividad } from './actividad';
 
 // Pagos (abonos) a documentos pendientes de cobro, guardados en el equipo (COBRO_PAGO + COBRO_PAGO_DET).
 // Un documento se puede pagar en varios abonos (100 → abona 20 → quedan 80 → ...) y cada abono
@@ -213,6 +214,19 @@ export async function registrarPago({
       );
     }
 
+    // Bitácora del reporte Mi día: monto por forma de pago.
+    const porForma = {};
+    for (const f of formas) porForma[f.forma] = (porForma[f.forma] ?? 0) + f.monto;
+    await anotarActividad(db, {
+      tipo: ACTIVIDAD.cobro,
+      clave: id,
+      cliente,
+      ruta,
+      documento,
+      monto,
+      detalle: { recibo, moneda: mon, cancelado: saldoAnterior - monto <= 0.005, formas: porForma },
+    });
+
     await db.runAsync('UPDATE RUTA_CONSECUT_RT SET RECIBO = ? WHERE RUTA = ?', [siguienteConsecutivo(recibo), ruta]);
     // El consecutivo nuevo también debe llegar al servidor (ver services/enviarDatos).
     await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('consecutivos_pendientes', '1')");
@@ -269,6 +283,7 @@ export async function eliminarPagoSinRecibo(idPago) {
     if (p.ENVIADO === 1) throw new Error('El pago ya se envió al servidor: no se puede eliminar.');
     await db.runAsync('DELETE FROM COBRO_PAGO_DET WHERE ID_PAGO = ?', [idPago]);
     await db.runAsync('DELETE FROM COBRO_PAGO WHERE ID = ?', [idPago]);
+    await quitarActividad(db, ACTIVIDAD.cobro, idPago);
     await db.runAsync(
       `DELETE FROM alCXC_ENC_DEP
         WHERE ORIGEN <> 'RECIBO' AND ENVIADO = 0

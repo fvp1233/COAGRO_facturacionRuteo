@@ -16,7 +16,8 @@ const corta = (v, max) => (v == null ? null : String(v).slice(0, max));
 const fechaSql = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v} 00:00:00` : v ?? null);
 const numero = (v) => (v == null || v === '' ? null : Number(v));
 
-// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, depositos, consecutivos, total }).
+// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, depositos,
+// promocionales, consecutivos, total }).
 // Depósitos = alCXC_ENC_DEP sin enviar (el efectivo y los cheques aún sin depositar no cuentan).
 export async function contarPendientes() {
   const db = await getDatabase();
@@ -26,6 +27,7 @@ export async function contarPendientes() {
   const pedidos = await cuenta('alFAC_ENC_PED');
   const aprobaciones = await cuenta('COTIZACION_APROBACION');
   const depositos = (await leerDepositosPendientes(db)).length;
+  const promocionales = await cuenta('PROMOCIONAL');
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos = flag?.value === '1' ? 1 : 0;
   return {
@@ -34,8 +36,9 @@ export async function contarPendientes() {
     pedidos,
     aprobaciones,
     depositos,
+    promocionales,
     consecutivos,
-    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + consecutivos,
+    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + promocionales + consecutivos,
   };
 }
 
@@ -173,7 +176,23 @@ async function leerPendientes(db) {
     encabezado: { ...d.encabezado, FEC_DEP: fechaSql(d.encabezado.FEC_DEP), NOTAS: corta(d.encabezado.NOTAS, 80) },
   }));
 
-  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, consecutivos };
+  // Solicitudes de promocionales creadas en el equipo (Validar > Promocionales). La llave en el
+  // servidor es CLIENTE + FECHA_SOLICITUD (reenviar la misma no la duplica); ID lo asigna el servidor.
+  const filasPromocional = await db.getAllAsync(
+    `SELECT CLIENTE, FECHA_SOLICITUD, RUTA, NOM_CLT, AGENTE, NOTAS, FECHA_REQUERIDA
+       FROM PROMOCIONAL WHERE ENVIADO = 0 ORDER BY FECHA_SOLICITUD`
+  );
+  const promocionales = filasPromocional.map((p) => ({
+    CLIENTE: p.CLIENTE,
+    FECHA_SOLICITUD: fechaSql(p.FECHA_SOLICITUD),
+    RUTA: p.RUTA,
+    NOM_CLT: p.NOM_CLT,
+    AGENTE: p.AGENTE,
+    NOTAS: p.NOTAS,
+    FECHA_REQUERIDA: fechaSql(p.FECHA_REQUERIDA),
+  }));
+
+  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, promocionales, consecutivos };
 }
 
 // Envía todo lo pendiente y marca como enviado lo que el servidor guardó (ok, o duplicado de un envío
@@ -189,6 +208,7 @@ export async function enviarPendientes() {
     datos.pedidos.length +
     datos.aprobaciones.length +
     datos.depositos.length +
+    datos.promocionales.length +
     datos.consecutivos.length;
   if (!total) return { enviados: 0, errores: [] };
 
@@ -196,6 +216,9 @@ export async function enviarPendientes() {
   const r = json?.result;
   const claves = ['ubicaciones', 'visitas', 'pedidos', 'aprobaciones', 'consecutivos'];
   if (datos.depositos.length) claves.push('depositos');
+  // Como depositos: solo se exige en la respuesta si se mandó alguna (un backend sin promocionales
+  // sigue funcionando mientras no haya solicitudes nuevas).
+  if (datos.promocionales.length) claves.push('promocionales');
   if (!r || !claves.every((k) => Array.isArray(r[k]))) {
     throw new ApiError('La respuesta del servidor al envío no tiene el formato esperado.');
   }
@@ -271,6 +294,25 @@ export async function enviarPendientes() {
       }
     );
     if (datos.depositos.length) await marcarPagosEnviados(db);
+    // Promocional ok (o duplicado de un envío anterior): queda enviado con el ID del servidor.
+    await procesar(
+      'Promocional',
+      datos.promocionales,
+      r.promocionales ?? [],
+      (p) => `Solicitud de ${p.CLIENTE} (${p.FECHA_SOLICITUD})`,
+      (p, error) => {
+        // FECHA_SOLICITUD siempre se guarda con hora: fechaSql no la cambia y sirve de llave tal cual.
+        const where = 'CLIENTE = ? AND FECHA_SOLICITUD = ?';
+        const llave = [p.CLIENTE, p.FECHA_SOLICITUD];
+        if (error) return db.runAsync(`UPDATE PROMOCIONAL SET ERROR_ENVIO = ? WHERE ${where}`, [error, ...llave]);
+        const res = r.promocionales?.[datos.promocionales.indexOf(p)];
+        const id = Number.isInteger(Number(res?.ID)) && res?.ID != null ? Number(res.ID) : null;
+        return db.runAsync(
+          `UPDATE PROMOCIONAL SET ENVIADO = 1, FECHA_ENVIO = ?, ERROR_ENVIO = NULL, ID = COALESCE(?, ID) WHERE ${where}`,
+          [ahora, id, ...llave]
+        );
+      }
+    );
     let consecutivosOk = true;
     await procesar(
       'Consecutivo',

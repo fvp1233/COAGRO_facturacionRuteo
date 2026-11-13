@@ -1,5 +1,6 @@
 import { getDatabase } from '../db/database';
 import { toSqlLocal } from './visitas';
+import { ACTIVIDAD, anotarActividad } from './actividad';
 
 // Tipo de documento de los subtipos que se ofrecen en el pedido (SUBTIPO_DOC.TIPO).
 const TIPO_FACTURA = 'FAC';
@@ -94,6 +95,74 @@ export async function getDatosPedido(codigoCliente, ruta) {
     subtipos,
     actividades,
   };
+}
+
+// Campos obligatorios del encabezado (nombres para el aviso). valores: lo elegido en el encabezado.
+export function faltantesEncabezado(valores) {
+  return [
+    [valores.pais, 'País'],
+    [valores.condicionPago, 'Condición de pago'],
+    [valores.nivelPrecio, 'Lista de precio'],
+    [valores.subtipo, 'Subtipo de factura'],
+  ]
+    .filter(([v]) => !v)
+    .map(([, nombre]) => nombre);
+}
+
+// Encabezado que recibe PedidoArticulosView. datos = getDatosPedido; valores = lo elegido en
+// PedidoView (pais, division1, division2, condicionPago, nivelPrecio, subtipo, actividadComercial,
+// creditoFiscal, sugeridoVenta, inicio).
+export function armarEncabezado(datos, valores) {
+  const c = datos.cliente;
+  return {
+    pais: valores.pais,
+    division1: valores.division1,
+    division2: valores.division2,
+    condicionPago: valores.condicionPago,
+    nivelPrecio: valores.nivelPrecio,
+    subtipo: valores.subtipo,
+    actividadComercial: valores.actividadComercial,
+    // Moneda preferida para los precios de los artículos (IND_MON del cliente).
+    moneda: c?.moneda ?? null,
+    // Descuento general (%) y exenciones de impuesto de ventas y de consumo (%) del cliente (CLIENTE_CIA).
+    descuento: c?.descuento ?? 0,
+    exentoVentas: c?.exentoVentas ?? 0,
+    exentoConsumo: c?.exentoConsumo ?? 0,
+    creditoFiscal: Boolean(valores.creditoFiscal),
+    sugeridoVenta: Boolean(valores.sugeridoVenta),
+    // Para guardar el pedido.
+    subtipoDescripcion: datos.subtipos.find((s) => s.codigo === valores.subtipo)?.descripcion ?? null,
+    compania: c?.compania ?? null,
+    lstPre: c?.lstPre ?? null,
+    direccionEntrega: c?.direccionEntrega ?? null,
+    inicio: valores.inicio,
+  };
+}
+
+// Encabezado con los valores del cliente tal como los precarga PedidoView (documento Normal, sin
+// sugerido de venta), para saltar esa pantalla (atajo desde Descuentos y promociones). Lanza un
+// Error con lo que falta si el cliente no tiene los datos obligatorios.
+export async function encabezadoPorDefecto(codigoCliente, ruta) {
+  const datos = await getDatosPedido(codigoCliente, ruta);
+  const c = datos.cliente;
+  if (!c) {
+    throw new Error('El cliente no tiene datos comerciales en la base local. Descarga los datos en Datos > Cargar datos.');
+  }
+  const valores = {
+    pais: c.pais,
+    division1: c.division1,
+    division2: c.division2,
+    condicionPago: c.condicionPago,
+    nivelPrecio: c.nivelPrecio,
+    subtipo: c.subtipo,
+    actividadComercial: c.actividadComercial,
+    creditoFiscal: false,
+    sugeridoVenta: false,
+    inicio: new Date(),
+  };
+  const faltan = faltantesEncabezado(valores);
+  if (faltan.length) throw new Error(`El cliente no tiene: ${faltan.join(', ')}.`);
+  return armarEncabezado(datos, valores);
 }
 
 // Siguiente consecutivo respetando el formato: prefijo + número con los mismos dígitos
@@ -234,6 +303,18 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
       await db.runAsync(insertar('alFAC_DET_PED', COLUMNAS_DET), COLUMNAS_DET.map((c) => det[c]));
     }
 
+    // Bitácora del reporte Mi día (no se borra al cargar datos).
+    await anotarActividad(db, {
+      tipo: tipoDoc === 'C' ? ACTIVIDAD.cotizacion : ACTIVIDAD.pedido,
+      clave: `${ruta}|${numero}`,
+      fecha: fin,
+      cliente,
+      ruta,
+      documento: numero,
+      monto: r6(sinIva + iva + oi),
+      detalle: { articulos: lineas.length, moneda: lineas[0]?.moneda ?? null },
+    });
+
     await db.runAsync(`UPDATE RUTA_CONSECUT_RT SET ${columna} = ? WHERE RUTA = ?`, [siguienteConsecutivo(numero), ruta]);
     // El consecutivo nuevo también debe llegar al servidor (ver services/enviarDatos).
     await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('consecutivos_pendientes', '1')");
@@ -279,7 +360,7 @@ export async function getCotizacionesCliente(cliente, ruta) {
 export async function aprobarCotizacion({ ruta, numero, entrega, fecha }) {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
-    const enc = await db.getFirstAsync('SELECT COD_CIA, TIP_DOC FROM alFAC_ENC_PED WHERE COD_ZON = ? AND NUM_PED = ?', [
+    const enc = await db.getFirstAsync('SELECT COD_CIA, TIP_DOC, COD_CLT, MON_CIV FROM alFAC_ENC_PED WHERE COD_ZON = ? AND NUM_PED = ?', [
       ruta,
       numero,
     ]);
@@ -297,5 +378,14 @@ export async function aprobarCotizacion({ ruta, numero, entrega, fecha }) {
        VALUES (?, ?, ?, ?, ?, 0)`,
       [enc.COD_CIA, ruta, numero, fecPed, fecDes]
     );
+    await anotarActividad(db, {
+      tipo: ACTIVIDAD.aprobacion,
+      clave: `${ruta}|${numero}`,
+      fecha,
+      cliente: enc.COD_CLT,
+      ruta,
+      documento: numero,
+      monto: enc.MON_CIV,
+    });
   });
 }

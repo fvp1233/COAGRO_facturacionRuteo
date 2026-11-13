@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
-import { getDatosPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
+import { armarEncabezado, faltantesEncabezado, getDatosPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
@@ -128,19 +128,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
   };
 
   const continuar = () => {
-    const faltan = [
-      [pais, 'País'],
-      [condicionPago, 'Condición de pago'],
-      [nivelPrecio, 'Lista de precio'],
-      [subtipo, 'Subtipo de factura'],
-    ]
-      .filter(([v]) => !v)
-      .map(([, nombre]) => nombre);
-    if (faltan.length) {
-      Alert.alert('Datos incompletos', `Selecciona: ${faltan.join(', ')}.`);
-      return;
-    }
-    onContinuar?.({
+    const valores = {
       pais,
       division1,
       division2,
@@ -148,21 +136,16 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
       nivelPrecio,
       subtipo,
       actividadComercial,
-      // Moneda preferida para los precios de los artículos (IND_MON del cliente).
-      moneda: datos.cliente?.moneda ?? null,
-      // Descuento general (%) y exenciones de impuesto de ventas y de consumo (%) del cliente (CLIENTE_CIA).
-      descuento: datos.cliente?.descuento ?? 0,
-      exentoVentas: datos.cliente?.exentoVentas ?? 0,
-      exentoConsumo: datos.cliente?.exentoConsumo ?? 0,
       creditoFiscal: tipoDocumento === 'Crédito fiscal',
       sugeridoVenta,
-      // Para guardar el pedido.
-      subtipoDescripcion: datos.subtipos.find((s) => s.codigo === subtipo)?.descripcion ?? null,
-      compania: datos.cliente?.compania ?? null,
-      lstPre: datos.cliente?.lstPre ?? null,
-      direccionEntrega: datos.cliente?.direccionEntrega ?? null,
       inicio,
-    });
+    };
+    const faltan = faltantesEncabezado(valores);
+    if (faltan.length) {
+      Alert.alert('Datos incompletos', `Selecciona: ${faltan.join(', ')}.`);
+      return;
+    }
+    onContinuar?.(armarEncabezado(datos, valores));
   };
 
   return (

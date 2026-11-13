@@ -3,9 +3,9 @@ import { colors } from '../theme';
 // Opciones disponibles al validar un cliente (pantalla ClienteOpcionesView).
 export const OPCIONES_CLIENTE = [
   {
-    id: 'inventario',
-    title: 'Inventario',
-    icon: 'archive',
+    id: 'promocionales',
+    title: 'Promocionales',
+    icon: 'library-shelves',
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
@@ -33,9 +33,9 @@ export const OPCIONES_CLIENTE = [
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
-    id: 'consignacion',
-    title: 'Consignación',
-    icon: 'handshake',
+    id: 'descuentos',
+    title: 'Descuentos y promociones',
+    icon: 'tag-multiple',
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {

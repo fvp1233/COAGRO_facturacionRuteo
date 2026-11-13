@@ -19,7 +19,7 @@ export const REPORTES = [
   {
     id: 'visitas',
     title: 'Visitas',
-    subtitle: 'Efectividad',
+    subtitle: 'Mi día',
     icon: 'map-marker-check',
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },

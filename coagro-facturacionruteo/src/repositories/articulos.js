@@ -85,7 +85,7 @@ export async function getArticulosPedido(ruta, nivelPrecio, moneda) {
      )
      SELECT a.COD_ART AS codigo, a.DES_ART AS descripcion, a.UND_EMP AS undEmp,
             a.FACTOR_VENTA AS factorVenta, a.EMP_ALM AS empAlm, a.EMP_DET AS empDet,
-            a.COD_FAM AS familia, a.CANASTA_BASICA AS canastaBasica, a.ES_OTRO_CARGO AS esOtroCargo,
+            a.COD_FAM AS familia, a.CLASIFICACION3 AS linea, a.CANASTA_BASICA AS canastaBasica, a.ES_OTRO_CARGO AS esOtroCargo,
             COALESCE(e.EXISTENCIA, 0) AS existencia, p.PRECIO AS precio, p.MONEDA AS moneda,
             COALESCE(i.IMPUESTO1, 0) AS impuesto1, COALESCE(i.IMPUESTO2, 0) AS impuesto2
        FROM ARTICULO a
@@ -101,6 +101,8 @@ export async function getArticulosPedido(ruta, nivelPrecio, moneda) {
     codigo: r.codigo,
     descripcion: r.descripcion,
     familia: r.familia ?? '',
+    // Línea del artículo (CLASIFICACION3): la usan las promociones con ALCANCE 'L'.
+    linea: r.linea ?? '',
     // ARTICULO_EXISTENCIA.EXISTENCIA en la bodega del ERP de la ruta (0 si no tiene fila).
     existencia: r.existencia,
     detalle: r.undEmp ?? 0,

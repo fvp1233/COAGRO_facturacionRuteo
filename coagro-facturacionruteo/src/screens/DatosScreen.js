@@ -17,7 +17,11 @@ import { getDatabase } from '../db/database';
 import { refrescarSesion } from '../services/mobileAuth';
 import { contarPendientes, enviarPendientes, limpiarEnviados } from '../services/enviarDatos';
 import { descargarRecibosPendientes } from '../services/syncRecibos';
-import { isNetworkError } from '../services/api';
+import { descargarMetasRecientes } from '../services/syncMetas';
+import { descargarDescuentos } from '../services/syncDescuentos';
+import { descargarPromociones } from '../services/syncPromociones';
+import { descargarPromocionales } from '../services/syncPromocionales';
+import { isAuthError, isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
 import { contarClientes, getUltimaSincronizacion } from '../repositories/clientes';
@@ -58,6 +62,7 @@ export default function DatosScreen({ module, onBack }) {
   const [envio, setEnvio] = useState('');
   const [errores, setErrores] = useState([]);
   const [error, setError] = useState('');
+  const [avisoMetas, setAvisoMetas] = useState('');
   const [vinculada, setVinculada] = useState(false);
 
   const refrescar = useCallback(async () => {
@@ -81,6 +86,7 @@ export default function DatosScreen({ module, onBack }) {
     setResumen(null);
     setEnvio('');
     setErrores([]);
+    setAvisoMetas('');
   };
 
   const mostrarError = (e, sinRed) => {
@@ -149,6 +155,17 @@ export default function DatosScreen({ module, onBack }) {
         historialPedidos: await descargarHistorialPedidosRuta(),
         historialFacturas: await descargarHistorialFacturasRuta(),
         cuentasBanco: await descargarCuentasBanco(),
+        descuentos: await descargarDescuentos(),
+        promociones: await descargarPromociones(),
+        promocionales: await descargarPromocionales(),
+        // Metas de venta (mes actual del servidor y los 3 anteriores, para consultarlas sin conexión). Un error de negocio (p. ej. la handheld
+        // sin agente asignado) no detiene la carga: se avisa y las metas guardadas no se tocan.
+        // Sesión vencida o sin red sí detienen la carga, como en las demás descargas.
+        metas: await descargarMetasRecientes().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          setAvisoMetas(`No se actualizaron las metas: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { metas: null, omitidos: 0 } };
+        }),
         // Va al final: cuadra los recibos del equipo con los pendientes del servidor (DOC_PRO = 'N').
         recibos: await descargarRecibosPendientes(),
       };
@@ -157,7 +174,7 @@ export default function DatosScreen({ module, onBack }) {
         await limpiarEnviados(db);
         for (const d of Object.values(descargas)) await d.guardar(db);
       });
-      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, recibos } =
+      const { clientes, clientesCia, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas } =
         Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
@@ -174,7 +191,11 @@ export default function DatosScreen({ module, onBack }) {
         historialPedidos: historialPedidos.pedidos,
         historialFacturas: historialFacturas.facturas,
         cuentasBanco: cuentasBanco.cuentas,
+        descuentos: descuentos.descuentos,
+        promociones: promociones.promociones,
+        promocionales: promocionales.promocionales,
         recibosPendientes: recibos.recibos,
+        metas: metas.metas,
         omitidos:
           clientes.omitidos +
           clientesCia.omitidos +
@@ -187,7 +208,11 @@ export default function DatosScreen({ module, onBack }) {
           historialPedidos.omitidos +
           historialFacturas.omitidos +
           cuentasBanco.omitidos +
-          recibos.omitidos,
+          descuentos.omitidos +
+          promociones.omitidos +
+          promocionales.omitidos +
+          recibos.omitidos +
+          metas.omitidos,
       });
     } catch (e) {
       mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
@@ -265,9 +290,15 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas, {resumen.cuentasBanco} cuentas de banco, {resumen.recibosPendientes} recibos pendientes de aplicar.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas, {resumen.cuentasBanco} cuentas de banco, {resumen.descuentos} descuentos, {resumen.promociones} promociones, {resumen.promocionales} solicitudes de promocionales, {resumen.recibosPendientes} recibos pendientes de aplicar{resumen.metas != null ? `, ${resumen.metas} metas de venta del mes` : ''}.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
+          </View>
+        ) : null}
+
+        {avisoMetas ? (
+          <View style={[styles.message, styles.fail]}>
+            <Text style={styles.failText}>{avisoMetas}</Text>
           </View>
         ) : null}
 

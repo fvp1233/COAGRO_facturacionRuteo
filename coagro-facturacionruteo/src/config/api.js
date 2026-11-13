@@ -42,6 +42,17 @@ export const PATHS = {
   syncCuentasBanco: '/fr/sync/cuentasBanco',
   // Recibos de cobro de la handheld que control aún no aplica en el ERP (DOC_PRO = 'N').
   syncRecibosPendientes: '/fr/sync/recibosPendientes',
+  // Metas de venta por artículo del agente del token. Sin parámetros = mes actual del servidor;
+  // ?anio=&mes= un mes; ?anio= todo el año. El vendedor NO se manda: sale del token.
+  syncMetas: '/fr/sync/metas',
+  // Descuentos por cliente y artículo (DESCUENTO_CLIART) para pedidos y cotizaciones.
+  syncDescuentos: '/fr/sync/descuentos',
+  // Promociones de la web (FR_PROMOCION, FR_PROMOCION_PRODUCTO y FR_PROMOCION_DESTINO).
+  syncPromociones: '/fr/sync/promociones',
+  syncPromocionesProductos: '/fr/sync/promocionesProductos',
+  syncPromocionesDestinos: '/fr/sync/promocionesDestinos',
+  // Solicitudes de promocionales (tabla PROMOCIONAL) de las rutas de la handheld.
+  syncPromocionales: '/fr/sync/promocionales',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

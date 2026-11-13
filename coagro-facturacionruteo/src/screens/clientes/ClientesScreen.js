@@ -21,11 +21,13 @@ import ConsultaClienteView from './ConsultaClienteView';
 import PedidoView from './PedidoView';
 import PedidoArticulosView from './PedidoArticulosView';
 import CotizacionesView from './CotizacionesView';
+import DescuentosView from './DescuentosView';
+import PromocionalesView from './PromocionalesView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
 import { getDocumentosCobro } from '../../repositories/cobros';
-import { TIPOS_PEDIDO } from '../../repositories/pedidos';
+import { encabezadoPorDefecto, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { formatMonto } from '../../utils/formato';
 import { colors } from '../../theme';
 
@@ -56,7 +58,7 @@ export default function ClientesScreen({ onBack }) {
   const [registro, setRegistro] = useState(null);
   // Último cliente seleccionado en la tabla ({ cliente, ruta }).
   const [seleccion, setSeleccion] = useState(null);
-  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'cotizacion' | 'consultar'); null = menú.
+  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'cotizacion' | 'descuentos' | 'consultar'); null = menú.
   const [opcionActiva, setOpcionActiva] = useState(null);
   // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
   const [cobro, setCobro] = useState(null);
@@ -70,6 +72,11 @@ export default function ClientesScreen({ onBack }) {
   const [pedido, setPedido] = useState(null);
   // En Cotización: true = captura de una nueva; false = lista de cotizaciones del cliente.
   const [nuevaCotizacion, setNuevaCotizacion] = useState(false);
+  // Atajo desde Descuentos y promociones: artículo con el que se abrió el pedido o la cotización
+  // ({ codigo, cantMin }), saltando el encabezado. null = flujo normal.
+  const [atajoDescuento, setAtajoDescuento] = useState(null);
+  // Pestaña abierta en Descuentos y promociones ('descuentos' | 'promociones'), para volver a ella.
+  const [tabDescuentos, setTabDescuentos] = useState('descuentos');
   // Consulta abierta desde el Menú Consultar del cliente (p. ej. 'cobros'); null = menú.
   const [consulta, setConsulta] = useState(null);
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
@@ -157,10 +164,43 @@ export default function ClientesScreen({ onBack }) {
   // con el inicio de Validar, y se vuelve al menú del cliente. Al salir de Validar ya no se pregunta.
   const handlePedidoGuardado = async (numero) => {
     const tipo = TIPOS_PEDIDO[opcionActiva];
+    setAtajoDescuento(null);
     setPedido(null);
     setNuevaCotizacion(false);
     setOpcionActiva(null);
     await registrarVisitaEfectiva(`${tipo.titulo} ${numero}`);
+  };
+
+  // Atajo desde Descuentos y promociones: arma el encabezado con los valores del cliente (sin pasar por
+  // PedidoView) y abre la captura de artículos con el artículo del descuento ya seleccionado.
+  // tipoKey: 'pedido' | 'cotizacion'. Si al cliente le faltan datos del encabezado, se avisa y se abre
+  // el encabezado normal para completarlos (el artículo queda guardado y se selecciona igual).
+  const hacerDesdeDescuento = async (tipoKey, descuento) => {
+    let encabezado = null;
+    let error = null;
+    try {
+      encabezado = await encabezadoPorDefecto(validando.cliente.codigo, validando.ruta);
+    } catch (e) {
+      error = e;
+    }
+    setAtajoDescuento({ codigo: descuento.articulo, cantMin: descuento.cantMin });
+    setNuevaCotizacion(tipoKey === 'cotizacion');
+    setPedido(encabezado);
+    setOpcionActiva(tipoKey);
+    if (error) {
+      Alert.alert(
+        `Datos ${TIPOS_PEDIDO[tipoKey].del}`,
+        `${error?.message || 'No se pudo armar el encabezado.'} Completa el encabezado para continuar.`
+      );
+    }
+  };
+
+  // Al salir de la captura abierta con el atajo se vuelve a Descuentos y promociones.
+  const volverADescuentos = () => {
+    setAtajoDescuento(null);
+    setPedido(null);
+    setNuevaCotizacion(false);
+    setOpcionActiva('descuentos');
   };
 
   // Registra la visita efectiva de la validación en curso (una sola vez por visita).
@@ -316,7 +356,8 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         encabezado={pedido}
         tipo={TIPOS_PEDIDO[opcionActiva]}
-        onBack={() => setPedido(null)}
+        articuloInicial={atajoDescuento}
+        onBack={() => (atajoDescuento ? volverADescuentos() : setPedido(null))}
         onGuardado={handlePedidoGuardado}
       />
     );
@@ -340,8 +381,33 @@ export default function ClientesScreen({ onBack }) {
         cliente={validando.cliente}
         ruta={validando.ruta}
         tipo={TIPOS_PEDIDO[opcionActiva]}
-        onBack={() => (opcionActiva === 'cotizacion' ? setNuevaCotizacion(false) : setOpcionActiva(null))}
+        onBack={() =>
+          atajoDescuento
+            ? volverADescuentos()
+            : opcionActiva === 'cotizacion'
+              ? setNuevaCotizacion(false)
+              : setOpcionActiva(null)
+        }
         onContinuar={setPedido}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'promocionales') {
+    return (
+      <PromocionalesView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setOpcionActiva(null)} />
+    );
+  }
+
+  if (validando && opcionActiva === 'descuentos') {
+    return (
+      <DescuentosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onHacerDocumento={hacerDesdeDescuento}
+        tab={tabDescuentos}
+        onTabChange={setTabDescuentos}
       />
     );
   }
@@ -410,8 +476,10 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={handleSalirValidar}
         onOpcion={(opcion) => {
-          if (['cobros', 'pedido', 'cotizacion', 'consultar'].includes(opcion.id)) {
+          if (['cobros', 'pedido', 'cotizacion', 'descuentos', 'promocionales', 'consultar'].includes(opcion.id)) {
             setNuevaCotizacion(false);
+            setAtajoDescuento(null);
+            setTabDescuentos('descuentos');
             setOpcionActiva(opcion.id);
           }
           else Alert.alert(opcion.title, 'Próximamente.');

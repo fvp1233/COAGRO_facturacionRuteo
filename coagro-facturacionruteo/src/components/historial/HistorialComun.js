@@ -82,10 +82,11 @@ export function Dato({ label, value }) {
   );
 }
 
-export function TabsHistorial({ tab, onChange }) {
+// tabs: [{ key, label }] (por defecto Detalle / Montos del historial).
+export function TabsHistorial({ tab, onChange, tabs = TABS_HISTORIAL }) {
   return (
     <View style={styles.tabs}>
-      {TABS_HISTORIAL.map((t) => (
+      {tabs.map((t) => (
         <Pressable key={t.key} onPress={() => onChange(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
           <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
         </Pressable>

@@ -449,4 +449,188 @@ export const migrations = [
       UPDATE alCXC_ENC_DEP SET DOC_PRO = 'N' WHERE ORIGEN = 'RECIBO';
     `);
   },
+
+  // v23: metas de venta por artículo del agente del token (GET /fr/sync/metas). Una meta por
+  // ANIO + MES + VENDEDOR + COD_ART. Volver a subir el Excel en la web reemplaza el periodo y cambia
+  // los ID_META: la sync borra el periodo completo y lo vuelve a insertar (no upsert por ID_META).
+  // VENTA_UNIDADES / VENTA_VALOR hoy llegan null (reservados); lo vendido se calcula en el equipo.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS META_VENTA (
+        ID_META            INTEGER PRIMARY KEY,
+        ANIO               INTEGER NOT NULL,
+        MES                INTEGER NOT NULL,
+        VENDEDOR           TEXT    NOT NULL,
+        COD_LINEA          TEXT,
+        LINEA              TEXT,
+        COD_LIDER          TEXT,
+        LIDER              TEXT,
+        COD_ART            TEXT    NOT NULL,
+        DES_ART            TEXT,
+        COD_PROVEEDOR      TEXT,
+        PROVEEDOR          TEXT,
+        META_UNIDADES      REAL    NOT NULL DEFAULT 0,
+        MINIMO             REAL    NOT NULL DEFAULT 0,
+        INCENTIVO          REAL    NOT NULL DEFAULT 0,
+        VENTA_UNIDADES     REAL,
+        VENTA_VALOR        REAL,
+        FECHA_MODIFICACION TEXT,
+        UNIQUE (ANIO, MES, VENDEDOR, COD_ART)
+      );
+      CREATE INDEX IF NOT EXISTS IX_META_VENTA_PERIODO ON META_VENTA (ANIO, MES);
+    `);
+  },
+
+  // v24: descuentos por cliente y artículo (erpadmin.DESCUENTO_CLIART, GET /fr/sync/descuentos) para
+  // pedidos y cotizaciones. La tabla del esquema de Exactus (v2) nunca se llenó: se vuelve a crear con
+  // las columnas en el mismo orden que el servidor y COMPANIA en la llave (el mismo descuento en dos
+  // compañías no se pisa). TIPO: tipo de descuento del ERP (ej. 'P' = porcentaje); MONTO según TIPO.
+  // FECHA_INICIO / FECHA_FIN como 'YYYY-MM-DD'.
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS DESCUENTO_CLIART;
+      CREATE TABLE DESCUENTO_CLIART (
+        "COMPANIA" TEXT NOT NULL DEFAULT '',
+        "ARTICULO" TEXT NOT NULL,
+        "CLIENTE" TEXT NOT NULL,
+        "CANT_MIN" REAL NOT NULL,
+        "CANT_MAX" REAL NOT NULL,
+        "FECHA_INICIO" TEXT NOT NULL,
+        "FECHA_FIN" TEXT NOT NULL,
+        "TIPO" TEXT NOT NULL,
+        "MONTO" REAL NOT NULL,
+        PRIMARY KEY ("COMPANIA", "ARTICULO", "CLIENTE", "CANT_MIN", "CANT_MAX", "FECHA_INICIO", "FECHA_FIN")
+      );
+      CREATE INDEX IF NOT EXISTS IX_DESCUENTO_CLIART_CLT_ART ON DESCUENTO_CLIART ("CLIENTE", "ARTICULO");
+    `);
+  },
+
+  // v25: promociones de la web (erpadmin.FR_PROMOCION, FR_PROMOCION_DESTINO y FR_PROMOCION_PRODUCTO;
+  // GET /fr/sync/promociones, /promocionesDestinos y /promocionesProductos). Mismos campos y nombres
+  // que en el servidor; se unen por PROMOCION_ID y se reemplazan completas en cada Cargar datos.
+  // - FR_PROMOCION: ACTIVA 1 = activa, 0 = inactiva. FECHA_INICIO / FECHA_FIN como 'YYYY-MM-DD'.
+  //   ARTICULO_BONIFICADO / CANTIDAD_BONIFICADA: bonificación (va aparte de los descuentos).
+  // - FR_PROMOCION_DESTINO: a quién aplica la promoción (TIPO + VALOR).
+  // - FR_PROMOCION_PRODUCTO: a qué artículos aplica, según ALCANCE:
+  //     'A' = código del artículo igual a VALOR; 'L' = línea (ARTICULO.CLASIFICACION3) igual a VALOR;
+  //     'T' = DES_ART contiene VALOR (sin distinguir mayúsculas).
+  //   DESCUENTO (%) o PRECIO_ESPECIAL desde CANTIDAD_MIN. Gana el precio más bajo entre descuentos,
+  //   precios especiales y DESCUENTO_CLIART (no se suman).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS FR_PROMOCION (
+        "ID" INTEGER PRIMARY KEY NOT NULL,
+        "TITULO" TEXT,
+        "DESCRIPCION" TEXT,
+        "TIPO" TEXT,
+        "FECHA_INICIO" TEXT,
+        "FECHA_FIN" TEXT,
+        "DESTINO" TEXT,
+        "ARTICULO_BONIFICADO" TEXT,
+        "CANTIDAD_BONIFICADA" REAL,
+        "ACTIVA" INTEGER NOT NULL DEFAULT 1,
+        "CREADO_POR" TEXT,
+        "FECHA_CREACION" TEXT,
+        "MODIFICADO_POR" TEXT,
+        "FECHA_MODIFICACION" TEXT
+      );
+      CREATE TABLE IF NOT EXISTS FR_PROMOCION_DESTINO (
+        "PROMOCION_ID" INTEGER NOT NULL,
+        "TIPO" TEXT NOT NULL,
+        "VALOR" TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY ("PROMOCION_ID", "TIPO", "VALOR")
+      );
+      CREATE TABLE IF NOT EXISTS FR_PROMOCION_PRODUCTO (
+        "ID" INTEGER PRIMARY KEY NOT NULL,
+        "PROMOCION_ID" INTEGER NOT NULL,
+        "ALCANCE" TEXT NOT NULL,
+        "VALOR" TEXT NOT NULL,
+        "CANTIDAD_MIN" REAL,
+        "DESCUENTO" REAL,
+        "PRECIO_ESPECIAL" REAL
+      );
+      CREATE INDEX IF NOT EXISTS IX_FR_PROMOCION_PRODUCTO_PROMO ON FR_PROMOCION_PRODUCTO ("PROMOCION_ID");
+    `);
+  },
+
+  // v26: solicitudes de promocionales (Validar > Promocionales). Las del servidor llegan con
+  // GET /fr/sync/promocionales (ENVIADO = 1); las que se registren en el equipo quedan con ENVIADO = 0
+  // hasta subirlas. DOC_PRO 'N' = pendiente, 'S' = procesada (FECHA_PROCESADO).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS PROMOCIONAL (
+        "CLIENTE" TEXT NOT NULL,
+        "FECHA_SOLICITUD" TEXT NOT NULL,
+        "ID" INTEGER,
+        "RUTA" TEXT NOT NULL,
+        "NOM_CLT" TEXT,
+        "AGENTE" TEXT,
+        "NOTAS" TEXT NOT NULL,
+        "FECHA_REQUERIDA" TEXT NOT NULL,
+        "DOC_PRO" TEXT NOT NULL DEFAULT 'N',
+        "FECHA_PROCESADO" TEXT,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        PRIMARY KEY ("CLIENTE", "FECHA_SOLICITUD")
+      );
+    `);
+  },
+
+  // v27: bitácora de actividad del equipo para el reporte Mi día (Reportes > Visitas). Se anota al
+  // registrar cada pedido, cotización, aprobación, cobro y promocional; "Cargar datos" NO la toca (sí
+  // borra los pedidos y aprobaciones ya enviados), así el reporte del día no pierde nada.
+  // TIPO: PEDIDO | COTIZACION | APROBACION | COBRO | PROMOCIONAL. CLAVE: identifica el registro dentro
+  // del tipo (para no duplicar y para quitarlo si se elimina). FECHA = día 'YYYY-MM-DD'; HORA =
+  // 'YYYY-MM-DD HH:MM:SS'. DETALLE: JSON con datos extra (recibo, formas de pago, notas...).
+  // Se carga con lo que ya hay en el equipo (pedidos sin enviar, aprobaciones, cobros, promocionales).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS REPORTE_ACTIVIDAD (
+        "TIPO" TEXT NOT NULL,
+        "CLAVE" TEXT NOT NULL,
+        "FECHA" TEXT NOT NULL,
+        "HORA" TEXT NOT NULL,
+        "CLIENTE" TEXT,
+        "NOM_CLT" TEXT,
+        "RUTA" TEXT,
+        "DOCUMENTO" TEXT,
+        "MONTO" REAL,
+        "DETALLE" TEXT,
+        PRIMARY KEY ("TIPO", "CLAVE")
+      );
+      CREATE INDEX IF NOT EXISTS IX_REPORTE_ACTIVIDAD_FECHA ON REPORTE_ACTIVIDAD ("FECHA");
+
+      INSERT OR IGNORE INTO REPORTE_ACTIVIDAD (TIPO, CLAVE, FECHA, HORA, CLIENTE, NOM_CLT, RUTA, DOCUMENTO, MONTO, DETALLE)
+      SELECT CASE WHEN e.TIP_DOC = 'C' THEN 'COTIZACION' ELSE 'PEDIDO' END,
+             e.COD_ZON || '|' || e.NUM_PED, substr(COALESCE(e.HOR_FIN, e.FEC_PED), 1, 10),
+             COALESCE(e.HOR_FIN, e.FEC_PED), e.COD_CLT,
+             (SELECT MIN(c.NOM_CLT) FROM CLIENTE c WHERE TRIM(c.COD_CLT) = TRIM(e.COD_CLT)),
+             e.COD_ZON, e.NUM_PED, e.MON_CIV, NULL
+        FROM alFAC_ENC_PED e
+       WHERE e.ENVIADO = 0
+          OR (e.TIP_DOC = 'F' AND NOT EXISTS (SELECT 1 FROM COTIZACION_APROBACION a
+                                                WHERE a.COD_ZON = e.COD_ZON AND a.NUM_PED = e.NUM_PED));
+
+      INSERT OR IGNORE INTO REPORTE_ACTIVIDAD (TIPO, CLAVE, FECHA, HORA, CLIENTE, NOM_CLT, RUTA, DOCUMENTO, MONTO, DETALLE)
+      SELECT 'APROBACION', a.COD_ZON || '|' || a.NUM_PED, substr(a.FEC_PED, 1, 10), a.FEC_PED, e.COD_CLT,
+             (SELECT MIN(c.NOM_CLT) FROM CLIENTE c WHERE TRIM(c.COD_CLT) = TRIM(e.COD_CLT)),
+             a.COD_ZON, a.NUM_PED, e.MON_CIV, NULL
+        FROM COTIZACION_APROBACION a
+        LEFT JOIN alFAC_ENC_PED e ON e.COD_ZON = a.COD_ZON AND e.NUM_PED = a.NUM_PED;
+
+      INSERT OR IGNORE INTO REPORTE_ACTIVIDAD (TIPO, CLAVE, FECHA, HORA, CLIENTE, NOM_CLT, RUTA, DOCUMENTO, MONTO, DETALLE)
+      SELECT 'COBRO', CAST(p.ID AS TEXT), substr(p.FECHA, 1, 10), p.FECHA, p.COD_CLT,
+             (SELECT MIN(c.NOM_CLT) FROM CLIENTE c WHERE TRIM(c.COD_CLT) = TRIM(p.COD_CLT)),
+             p.COD_ZON, p.NUM_DOC, p.MONTO,
+             json_object('recibo', p.NUM_REC, 'moneda', p.MONEDA, 'cancelado', CASE WHEN p.SALDO_NUEVO <= 0.005 THEN 1 ELSE 0 END)
+        FROM COBRO_PAGO p;
+
+      INSERT OR IGNORE INTO REPORTE_ACTIVIDAD (TIPO, CLAVE, FECHA, HORA, CLIENTE, NOM_CLT, RUTA, DOCUMENTO, MONTO, DETALLE)
+      SELECT 'PROMOCIONAL', p.CLIENTE || '|' || p.FECHA_SOLICITUD, substr(p.FECHA_SOLICITUD, 1, 10), p.FECHA_SOLICITUD,
+             p.CLIENTE, p.NOM_CLT, p.RUTA, NULL, NULL, json_object('notas', p.NOTAS, 'requerida', p.FECHA_REQUERIDA)
+        FROM PROMOCIONAL p
+       WHERE p.ENVIADO = 0;
+    `);
+  },
 ];

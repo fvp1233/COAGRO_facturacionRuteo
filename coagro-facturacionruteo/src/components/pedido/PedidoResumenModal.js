@@ -10,9 +10,6 @@ import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
 
-// Descuentos 1 y 2 del encabezado: aún no hay de dónde salen (0).
-const DESCUENTO1 = 0;
-const DESCUENTO2 = 0;
 // Días que se ofrecen para la entrega, desde hoy.
 const DIAS_ENTREGA = 30;
 // Largo máximo de las notas: OBS_PED en el servidor (se recorta igual al enviar).
@@ -77,7 +74,7 @@ export default function PedidoResumenModal({
   const descuento = suma('descuento');
   const iva = suma('iva');
   const oi = suma('oi');
-  const neto = bruto - descuento - DESCUENTO1 - DESCUENTO2 + iva + oi;
+  const neto = bruto - descuento + iva + oi;
   const m = (n) => formatMonto(n, moneda);
 
   const confirmarGuardar = () => {
@@ -143,8 +140,6 @@ export default function PedidoResumenModal({
             <View style={styles.grid}>
               <Dato label="Total bruto" value={m(bruto)} />
               <Dato label="Descuento" value={m(descuento)} />
-              <Dato label="Descuento 1" value={m(DESCUENTO1)} />
-              <Dato label="Descuento 2" value={m(DESCUENTO2)} />
               <Dato label="IVA" value={m(iva)} />
               <Dato label="OI" value={m(oi)} />
               <Dato label="Total neto" value={m(neto)} destacado />

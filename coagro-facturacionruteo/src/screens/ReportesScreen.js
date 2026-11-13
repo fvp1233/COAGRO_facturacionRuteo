@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../components/ui/CenteredHeader';
 import OptionTile from '../components/consulta/OptionTile';
 import InventarioReporteView from './reportes/InventarioReporteView';
+import MiDiaReporteView from './reportes/MiDiaReporteView';
 import { REPORTES } from '../constants/reportes';
 import { colors, radius, spacing } from '../theme';
 
@@ -20,6 +21,7 @@ function formatHoy() {
 // Reportes que ya tienen pantalla propia.
 const VISTAS = {
   inventario: InventarioReporteView,
+  visitas: MiDiaReporteView,
 };
 
 // Módulo Reportes: menú con los reportes disponibles de la jornada.
