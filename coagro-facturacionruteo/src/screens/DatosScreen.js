@@ -20,6 +20,8 @@ import { descargarMetasRecientes } from '../services/syncMetas';
 import { descargarDescuentos } from '../services/syncDescuentos';
 import { descargarPromociones } from '../services/syncPromociones';
 import { descargarPromocionales } from '../services/syncPromocionales';
+import { descargarEmpresa } from '../services/syncEmpresa';
+import { descargarMunicipios } from '../services/syncMunicipios';
 import { isAuthError, isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
@@ -61,7 +63,9 @@ export default function DatosScreen({ module, onBack }) {
   const [envio, setEnvio] = useState('');
   const [errores, setErrores] = useState([]);
   const [error, setError] = useState('');
-  const [avisoMetas, setAvisoMetas] = useState('');
+  // Avisos de descargas que fallaron sin detener la carga (metas, empresa).
+  const [avisos, setAvisos] = useState([]);
+  const agregarAviso = (texto) => setAvisos((lista) => [...lista, texto]);
   const [vinculada, setVinculada] = useState(false);
 
   const refrescar = useCallback(async () => {
@@ -85,7 +89,7 @@ export default function DatosScreen({ module, onBack }) {
     setResumen(null);
     setEnvio('');
     setErrores([]);
-    setAvisoMetas('');
+    setAvisos([]);
   };
 
   const mostrarError = (e, sinRed) => {
@@ -161,8 +165,21 @@ export default function DatosScreen({ module, onBack }) {
         // Sesión vencida o sin red sí detienen la carga, como en las demás descargas.
         metas: await descargarMetasRecientes().catch((e) => {
           if (isAuthError(e) || isNetworkError(e)) throw e;
-          setAvisoMetas(`No se actualizaron las metas: ${e?.message || 'error del servidor'}`);
+          agregarAviso(`No se actualizaron las metas: ${e?.message || 'error del servidor'}`);
           return { guardar: async () => {}, resumen: { metas: null, omitidos: 0 } };
+        }),
+        // Datos del emisor para el PDF del pedido sin conexión. Igual que metas: un error del servidor
+        // (p. ej. el endpoint aún no existe) no detiene la carga; se conservan los datos guardados.
+        empresa: await descargarEmpresa().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron los datos de la empresa: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { empresa: 0, omitidos: 0 } };
+        }),
+        // Municipios de la reforma: igual, si el servidor falla se conservan los guardados.
+        municipios: await descargarMunicipios().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron los municipios y distritos: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { municipios: 0, distritos: 0, omitidos: 0 } };
         }),
         // Va al final: cuadra los recibos del equipo con los pendientes del servidor (DOC_PRO = 'N').
         recibos: await descargarRecibosPendientes(),
@@ -292,11 +309,11 @@ export default function DatosScreen({ module, onBack }) {
           </View>
         ) : null}
 
-        {avisoMetas ? (
-          <View style={[styles.message, styles.fail]}>
-            <Text style={styles.failText}>{avisoMetas}</Text>
+        {avisos.map((aviso) => (
+          <View key={aviso} style={[styles.message, styles.fail]}>
+            <Text style={styles.failText}>{aviso}</Text>
           </View>
-        ) : null}
+        ))}
 
         {error ? (
           <View style={[styles.message, styles.fail]}>

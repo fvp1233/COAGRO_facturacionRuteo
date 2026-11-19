@@ -8,6 +8,7 @@ import CenteredHeader from '../../components/ui/CenteredHeader';
 import Pagination from '../../components/ui/Pagination';
 import Checkbox from '../../components/ui/Checkbox';
 import SearchBar from '../../components/ui/SearchBar';
+import ValorOculto from '../../components/ui/ValorOculto';
 import PromocionesLista from '../../components/promociones/PromocionesLista';
 import {
   ClienteHistorialCard,
@@ -49,7 +50,7 @@ const clave = (d) => `${d.compania}|${d.articulo}|${d.cantMin}|${d.cantMax}|${d.
 // Valor del descuento según TIPO: 'P' = porcentaje; otro = monto.
 const valorDescuento = (d) => (d.tipo === TIPO_PORCENTAJE ? formatPorcentaje(d.monto) : formatMonto(d.monto));
 
-// Card de un descuento: artículo, rango de cantidades, vigencia y valor del descuento. Al tocarla se
+// Card de un descuento: artículo, rango de cantidades, vigencia y el valor oculto ("Ver descuento"). Al tocarla se
 // abre el popup para hacer un pedido o una cotización con ese artículo.
 function DescuentoCard({ descuento: d, onPress }) {
   const v = VIGENCIAS[d.vigencia];
@@ -81,8 +82,9 @@ function DescuentoCard({ descuento: d, onPress }) {
         </View>
       </View>
       <View style={h.cardDerecha}>
-        <Text style={[styles.valor, vencido && styles.atenuada]}>{valorDescuento(d)}</Text>
         <Etiqueta texto={v.texto} tono={v.tono} />
+        {/* El tope no va en primer plano: se consulta tocando "Ver descuento". */}
+        <ValorOculto valor={`Hasta ${valorDescuento(d)}`} style={vencido && styles.atenuada} />
       </View>
       <Feather name="chevron-right" size={18} color={colors.textDisabled} />
     </Pressable>
@@ -247,10 +249,6 @@ export default function DescuentosView({
       >
         {elegido ? (
           <>
-            <View style={h.sheetTotal}>
-              <Text style={h.seccionLabel}>DESCUENTO</Text>
-              <Text style={h.sheetTotalValor}>{valorDescuento(elegido)}</Text>
-            </View>
             <View style={h.datos}>
               <Dato label="Código" value={elegido.articulo} />
               <Dato
@@ -262,6 +260,8 @@ export default function DescuentosView({
                 value={`${formatFechaDoc(elegido.fechaInicio)} al ${formatFechaDoc(elegido.fechaFin)}`}
               />
             </View>
+            <ValorOculto valor={`Descuento máximo: ${valorDescuento(elegido)}`} etiqueta="Ver descuento máximo" />
+            <Text style={h.aviso}>En el pedido el descuento empieza en 0%: súbelo con el contador hasta lo negociado.</Text>
             {elegido.vigencia !== VIGENCIA.vigente ? (
               <Text style={h.aviso}>
                 Este descuento no está vigente hoy: el artículo se agregará sin este descuento.
@@ -292,6 +292,5 @@ export default function DescuentosView({
 }
 
 const styles = StyleSheet.create({
-  valor: { fontSize: 18, fontWeight: '800', color: colors.primary },
   atenuada: { opacity: 0.55 },
 });

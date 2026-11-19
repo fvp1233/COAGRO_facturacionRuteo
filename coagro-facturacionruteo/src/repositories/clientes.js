@@ -1,4 +1,5 @@
 import { getDatabase } from '../db/database';
+import { PAIS_DIVISION_DEFECTO } from '../utils/divisiones';
 
 // Rutas disponibles en el equipo. Si aún no hay catálogo (RUTA_RT), se deducen de los clientes.
 export async function getRutas() {
@@ -66,7 +67,7 @@ const NOMBRE_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sába
 export async function getClienteConsulta(cliente, ruta) {
   const db = await getDatabase();
   const c = await db.getFirstAsync(
-    `SELECT c.COD_CLT, c.NOM_CLT, c.DIR_CLT,
+    `SELECT c.COD_CLT, c.NOM_CLT, c.ALIAS, c.DIR_CLT,
             cc.COD_CLT AS CIA_CLT, cc.NOM_CTO, cc.NUM_TEL, cc.COD_TIP_CL, t.DES_TIP_CL, c.NIVEL_PRECIO, cc.DIA_CRE, cc.LIM_CRE,
             cc.POR_EXC_VT, cc.POR_EXC_CS, cc.IND_MON, cc.DESCUENTO,
             COALESCE(NULLIF(TRIM(cc.codActividad), ''), cc.CODIGO) AS COD_ACTIVIDAD,
@@ -74,21 +75,35 @@ export async function getClienteConsulta(cliente, ruta) {
             cc.codActividad, cc.desActividad,
             cc.nomEncargadoCompras, cc.telEncargadoCompras, cc.nomEncargadoPagos, cc.telEncargadoPagos,
             cc.COD_PAIS, p.ETIQUETA_DIV_GEO1, p.ETIQUETA_DIV_GEO2,
+            COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AS PAIS_DIVISION,
             cc.DIVISION_GEOGRAFICA1, d1.NOMBRE AS NOM_DIV1,
             cc.DIVISION_GEOGRAFICA2, d2.NOMBRE AS NOM_DIV2,
-            cc.DIVISION_GEOGRAFICA3, d3.NOMBRE AS NOM_DIV3
+            cc.DIVISION_GEOGRAFICA3, m.NOMBRE AS NOM_DIV3,
+            -- Municipio de la reforma que corresponde al distrito (DIVISION_GEOGRAFICA2), para los
+            -- clientes que aún no lo tienen guardado en DIVISION_GEOGRAFICA3.
+            ms.MUNICIPIO AS MUN_SUGERIDO, ms.NOMBRE AS NOM_MUN_SUGERIDO
        FROM CLIENTE c
        LEFT JOIN CLIENTE_CIA cc ON cc.COD_CLT = c.COD_CLT
        LEFT JOIN alFAC_PAIS p ON p.COD_PAIS = cc.COD_PAIS
+       -- País de las divisiones: COD_PAIS no siempre es un país (trae códigos de vendedor como 'VRR1');
+       -- si no tiene departamentos se usa 'SAL' (utils/divisiones, paisGeografico).
+       LEFT JOIN (SELECT DISTINCT PAIS FROM DIVISION_GEOGRAFICA1) pd ON pd.PAIS = cc.COD_PAIS
        LEFT JOIN DIVISION_GEOGRAFICA1 d1
-              ON d1.PAIS = cc.COD_PAIS AND d1.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+              ON d1.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND d1.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
        LEFT JOIN DIVISION_GEOGRAFICA2 d2
-              ON d2.PAIS = cc.COD_PAIS AND d2.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+              ON d2.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND d2.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
              AND d2.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
-       LEFT JOIN DIVISION_GEOGRAFICA3 d3
-              ON d3.PAIS = cc.COD_PAIS AND d3.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
-             AND d3.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
-             AND d3.DIVISION_GEOGRAFICA3 = cc.DIVISION_GEOGRAFICA3
+       -- Opción B (migración v34): DIVISION_GEOGRAFICA3 guarda el municipio de la reforma.
+       LEFT JOIN FR_MUNICIPIO m
+              ON m.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND m.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+             AND m.MUNICIPIO = cc.DIVISION_GEOGRAFICA3
+       LEFT JOIN (SELECT f.PAIS, f.DIVISION_GEOGRAFICA1, f.DIVISION_GEOGRAFICA2, f.MUNICIPIO, fm.NOMBRE
+                    FROM FR_DISTRITO f
+                    JOIN FR_MUNICIPIO fm
+                      ON fm.PAIS = f.PAIS AND fm.DIVISION_GEOGRAFICA1 = f.DIVISION_GEOGRAFICA1
+                     AND fm.MUNICIPIO = f.MUNICIPIO) ms
+              ON ms.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND ms.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+             AND ms.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
        LEFT JOIN ACTIVIDAD_COMERCIAL a ON TRIM(a.codigo) = TRIM(cc.CODIGO)
        LEFT JOIN (SELECT COD_TIP_CL, MIN(DES_TIP_CL) AS DES_TIP_CL FROM alFAC_TIP_CLT GROUP BY COD_TIP_CL) t
               ON t.COD_TIP_CL = cc.COD_TIP_CL
@@ -111,6 +126,7 @@ export async function getClienteConsulta(cliente, ruta) {
   return {
     codigo: c.COD_CLT,
     nombre: c.NOM_CLT,
+    alias: c.ALIAS,
     direccion: c.DIR_CLT,
     // false: el cliente no tiene fila en CLIENTE_CIA (sus datos comerciales no están disponibles).
     tieneDatosComerciales: c.CIA_CLT != null,
@@ -134,17 +150,21 @@ export async function getClienteConsulta(cliente, ruta) {
     actividadCodigo: c.COD_ACTIVIDAD,
     actividadDescripcion: c.DES_ACTIVIDAD,
     // Valores propios de CLIENTE_CIA (sin el respaldo de CODIGO / catálogo): los que se editan.
-    // Divisiones geográficas (departamento, municipio, distrito) dentro del país del cliente.
-    // Etiquetas del país (alFAC_PAIS) si las tiene.
+    // Divisiones geográficas dentro del país del cliente (opción B, migración v34):
+    // division1 = departamento, division2 = distrito (código del ERP), division3 = municipio de la
+    // reforma. municipioSugerido: el que corresponde al distrito según FR_DISTRITO (null si no se sabe).
+    // Etiqueta del departamento del país (alFAC_PAIS) si la tiene.
     pais: c.COD_PAIS,
+    // País con que se filtran y unen las divisiones (paisGeografico); `pais` sigue siendo COD_PAIS.
+    paisDivision: c.PAIS_DIVISION,
     etiquetaDivision1: c.ETIQUETA_DIV_GEO1,
-    etiquetaDivision2: c.ETIQUETA_DIV_GEO2,
     division1: c.DIVISION_GEOGRAFICA1,
     nombreDivision1: c.NOM_DIV1,
     division2: c.DIVISION_GEOGRAFICA2,
     nombreDivision2: c.NOM_DIV2,
     division3: c.DIVISION_GEOGRAFICA3,
     nombreDivision3: c.NOM_DIV3,
+    municipioSugerido: c.MUN_SUGERIDO ? { codigo: c.MUN_SUGERIDO, nombre: c.NOM_MUN_SUGERIDO } : null,
     actividadCodigoPropio: c.codActividad,
     actividadDescripcionPropia: c.desActividad,
     encargadoCompras: c.nomEncargadoCompras,

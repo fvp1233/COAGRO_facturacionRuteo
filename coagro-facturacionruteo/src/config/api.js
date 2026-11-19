@@ -8,7 +8,7 @@ export const API_PREFIX = '/api/v1';
 // Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
 // Con null se usa el servidor guardado en la pantalla de Conexión.
 //export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
- export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
+export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
 //export const BASE_URL = null;
 
 // /fr/mobile/registro y /fr/mobile/login no llevan token; el resto exige el token de la app
@@ -23,6 +23,10 @@ export const PATHS = {
   // Se arma con los datos del servidor: la cotización tiene que estar enviada.
   cotizacionPdf: (cia, pedido) =>
     `/fr/mobile/cotizacion/${encodeURIComponent(cia)}/${encodeURIComponent(pedido)}/pdf`,
+  // PDF del recibo de cobro (alCXC_ENC_DEP + alCXC_DET_DEP) ya enviado:
+  // /fr/mobile/recibo/<numDep>/pdf?ctaBco=<cuenta>&numDoc=<documento>.
+  reciboPdf: (numDep, ctaBco, numDoc) =>
+    `/fr/mobile/recibo/${encodeURIComponent(numDep)}/pdf?ctaBco=${encodeURIComponent(ctaBco ?? '')}&numDoc=${encodeURIComponent(numDoc ?? '')}`,
   syncClientes: '/fr/sync/clientes',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
@@ -52,6 +56,10 @@ export const PATHS = {
   syncPromocionesDestinos: '/fr/sync/promocionesDestinos',
   // Solicitudes de promocionales (tabla PROMOCIONAL) de las rutas de la handheld.
   syncPromocionales: '/fr/sync/promocionales',
+  // División territorial de la reforma: municipios nuevos (FR_MUNICIPIO) y distrito -> municipio (FR_DISTRITO).
+  syncMunicipios: '/fr/sync/municipios',
+  // Datos públicos del emisor (dte.dbo.empresa) para armar el PDF del pedido sin conexión.
+  syncEmpresa: '/fr/sync/empresa',
   // Subida de lo registrado en el equipo (ubicaciones, visitas, pedidos y consecutivos).
   syncEnviar: '/fr/sync/enviar',
 };

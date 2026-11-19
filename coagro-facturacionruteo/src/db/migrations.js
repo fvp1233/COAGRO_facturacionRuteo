@@ -695,4 +695,57 @@ export const migrations = [
   async (db) => {
     await db.runAsync("DELETE FROM CLIENTE_CAMBIO WHERE CAMPO = 'DIAS_VISITA'");
   },
+
+  // v32: datos públicos del emisor (dte.dbo.empresa de la empresa del usuario de la handheld) para
+  // armar sin conexión el PDF del pedido / cotización con el mismo encabezado que el del servidor.
+  // Llegan en GET /fr/sync/empresa (Datos > Cargar datos); mismos nombres de columna que dte.dbo.empresa.
+  // Una sola fila; vacía hasta la primera carga (el PDF usa entonces los datos fijos del recibo).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS EMPRESA (
+        "Empresa_id" INTEGER NOT NULL PRIMARY KEY,
+        "nombre" TEXT,
+        "nombreComercial" TEXT,
+        "nit" TEXT,
+        "nrc" TEXT,
+        "codActividad" TEXT,
+        "desActividad" TEXT,
+        "complementoDir" TEXT,
+        "telefono" TEXT,
+        "correoDte" TEXT
+      );
+    `);
+  },
+
+  // v33: alias (nombre con que se conoce al cliente) en CLIENTE. Llega en /fr/sync/clientes y se edita
+  // en Consultar > Cliente como los demás campos (CLIENTE_CAMBIO, CAMPO 'ALIAS'). null hasta la próxima carga.
+  async (db) => {
+    await db.execAsync('ALTER TABLE CLIENTE ADD COLUMN ALIAS TEXT;');
+  },
+
+  // v34: división territorial de la reforma (14 departamentos, 44 municipios, 262 distritos) SIN
+  // cambiar el ERP (opción B): el ERP sigue con sus 261 "municipios" (erpadmin.DIVISION_GEOGRAFICA2),
+  // que hoy son los DISTRITOS. Llegan en GET /fr/sync/municipios (Datos > Cargar datos):
+  //  - FR_MUNICIPIO: los municipios nuevos, cada uno en su departamento (DIVISION_GEOGRAFICA1).
+  //  - FR_DISTRITO: a qué municipio nuevo pertenece cada código del ERP (DIVISION_GEOGRAFICA2).
+  // En CLIENTE_CIA: DIVISION_GEOGRAFICA1 = departamento, DIVISION_GEOGRAFICA2 = distrito (código del
+  // ERP, como siempre) y DIVISION_GEOGRAFICA3 = municipio nuevo (FR_MUNICIPIO.MUNICIPIO).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS FR_MUNICIPIO (
+        "PAIS" TEXT NOT NULL,
+        "DIVISION_GEOGRAFICA1" TEXT NOT NULL,
+        "MUNICIPIO" TEXT NOT NULL,
+        "NOMBRE" TEXT NOT NULL,
+        PRIMARY KEY ("PAIS", "DIVISION_GEOGRAFICA1", "MUNICIPIO")
+      );
+      CREATE TABLE IF NOT EXISTS FR_DISTRITO (
+        "PAIS" TEXT NOT NULL,
+        "DIVISION_GEOGRAFICA1" TEXT NOT NULL,
+        "DIVISION_GEOGRAFICA2" TEXT NOT NULL,
+        "MUNICIPIO" TEXT NOT NULL,
+        PRIMARY KEY ("PAIS", "DIVISION_GEOGRAFICA1", "DIVISION_GEOGRAFICA2")
+      );
+    `);
+  },
 ];

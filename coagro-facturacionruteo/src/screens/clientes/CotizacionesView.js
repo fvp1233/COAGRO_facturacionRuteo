@@ -8,8 +8,7 @@ import AprobarCotizacionModal from '../../components/pedido/AprobarCotizacionMod
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import Pagination from '../../components/ui/Pagination';
 import { aprobarCotizacion, getCotizacionesCliente } from '../../repositories/pedidos';
-import { isNetworkError } from '../../services/api';
-import { descargarCotizacionPdf } from '../../services/documentoPdf';
+import { imprimirPedido } from '../../services/pedidoPdf';
 import { formatFechaDoc, formatMontoMoneda } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
@@ -69,7 +68,7 @@ function CotizacionCard({ cotizacion, selected, onPress }) {
 // Validar cliente > Cotización: cotizaciones del cliente (capturadas en el equipo y descargadas en
 // Datos > Cargar datos), en cards paginadas. "Nueva" abre la captura (mismas pantallas del pedido);
 // al seleccionar una card (tocarla de nuevo quita la selección) se puede aprobar: pasa a pedido (TIP_DOC 'F') con fecha de hoy y la entrega que se elija, o
-// imprimir: descarga su PDF del backend (requiere internet y que la cotización ya esté enviada).
+// imprimir: PDF del backend si ya está enviada y hay conexión; si no, se arma en el equipo (services/pedidoPdf).
 // onNueva(): abrir la captura. onAprobada(numero): el contenedor registra la visita.
 export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onAprobada }) {
   const insets = useSafeAreaInsets();
@@ -117,23 +116,12 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
 
   const imprimir = async () => {
     if (!cotizacion || generando) return;
-    if (!cotizacion.enviada) {
-      Alert.alert(
-        'Imprimir cotización',
-        `La cotización ${cotizacion.numero} aún no está en el servidor. Envíala en Datos > Enviar Datos y vuelve a intentar.`
-      );
-      return;
-    }
     setGenerando(true);
     try {
-      await descargarCotizacionPdf(cotizacion.compania, cotizacion.numero);
+      // Enviada y con conexión: PDF del servidor; si no, se arma en el equipo.
+      await imprimirPedido({ ruta, numero: cotizacion.numero, compania: cotizacion.compania, cotizacion: true });
     } catch (e) {
-      Alert.alert(
-        'No se pudo descargar el PDF',
-        isNetworkError(e)
-          ? 'Debes estar conectado a internet para descargar el PDF de la cotización.'
-          : e?.message || 'Intenta de nuevo.'
-      );
+      Alert.alert('No se pudo generar el PDF', e?.message || 'Intenta de nuevo.');
     } finally {
       setGenerando(false);
     }

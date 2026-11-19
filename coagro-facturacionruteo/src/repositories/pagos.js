@@ -298,7 +298,7 @@ export async function eliminarPagoSinRecibo(idPago) {
 export async function getRecibo(idPago) {
   const db = await getDatabase();
   const p = await db.getFirstAsync(
-    `SELECT p.*, ${SQL_NUM_REC} AS NUM_REC_RECIBO,
+    `SELECT p.*, ${SQL_NUM_REC} AS NUM_REC_RECIBO, ${SQL_DOC_PRO} AS DOC_PRO_RECIBO,
             (SELECT e.NOTAS FROM COBRO_PAGO_DET d
                JOIN alCXC_ENC_DEP e
                  ON e.COD_CIA = d.DEP_CIA AND e.COD_BCO = d.DEP_BCO AND e.CTA_BCO = d.DEP_CTA AND e.NUM_DEP = d.DEP_NUM
@@ -346,6 +346,8 @@ export async function getRecibo(idPago) {
     cuenta: p.DEP_CTA ?? '',
     nombreCuenta: p.NOM_CTA ?? '',
     enviado: p.ENVIADO === 1,
+    // Control ya lo aplicó en el ERP (DOC_PRO 'S'): el servidor ya no puede reconstruir sus saldos.
+    aplicado: p.DOC_PRO_RECIBO === 'S',
     formas: formas.map((f) => ({
       forma: f.FORMA,
       monto: Number(f.MONTO ?? 0),

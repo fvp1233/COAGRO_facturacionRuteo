@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Feather } from '@expo/vector-icons';
 
 import Checkbox from '../ui/Checkbox';
+import ValorOculto from '../ui/ValorOculto';
 import { Dato, DetalleSheet, Etiqueta, historialStyles } from '../historial/HistorialComun';
 import { VIGENCIA } from '../../repositories/descuentos';
 import { ALCANCE, DESTINO, getPromocionesCliente } from '../../repositories/promociones';
@@ -61,7 +62,8 @@ function ProductoFila({ producto: p, atenuada, seleccionable = false, selecciona
         <Text style={styles.productoNombre} numberOfLines={2}>{textoAlcance(p)}</Text>
         <Text style={styles.productoMeta}>{textoCantidad(p)}</Text>
       </View>
-      <Text style={[styles.beneficio, atenuada && styles.atenuada]}>{textoBeneficio(p)}</Text>
+      {/* El tope no va en primer plano: se consulta tocando "Ver descuento". */}
+      <ValorOculto valor={textoBeneficio(p)} style={[styles.beneficio, atenuada && styles.atenuada]} />
     </Pressable>
   );
 }
@@ -302,7 +304,7 @@ const styles = StyleSheet.create({
   productoSeleccionado: { borderColor: colors.primary },
   productoNombre: { fontSize: 13, fontWeight: '600', color: colors.text },
   productoMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  beneficio: { fontSize: 15, fontWeight: '800', color: colors.primary, textAlign: 'right', maxWidth: '45%' },
+  beneficio: { maxWidth: '45%' },
   bonificacion: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bonificacionText: { flex: 1, fontSize: 12, color: colors.text },
   atenuada: { opacity: 0.55 },

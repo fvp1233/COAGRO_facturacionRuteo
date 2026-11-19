@@ -22,8 +22,9 @@ export const TIPOS_PEDIDO = {
 
 // Datos para abrir un pedido: valores del cliente (CLIENTE_CIA, se descargan en Datos > Cargar
 // datos desde /fr/sync/clientes) y los catálogos para elegirlos. Cada opción es
-// { codigo, descripcion }; las de región llevan además `pais` (y `division1` las de región 2,
-// `division1` y `division2` las de región 3).
+// { codigo, descripcion }; las divisiones llevan además `pais` (y `division1` municipios y distritos;
+// los distritos también `municipio`). Ver utils/divisiones.
+// cliente.division3 es el municipio de la reforma (opción B) y cliente.division2 el distrito.
 // `cliente` es null si el cliente no tiene fila en CLIENTE_CIA.
 // Nivel de precio: CLIENTE.NIVEL_PRECIO del cliente en la ruta (llega en /fr/sync/clientes).
 export async function getDatosPedido(codigoCliente, ruta) {
@@ -38,7 +39,9 @@ export async function getDatosPedido(codigoCliente, ruta) {
     [ruta, codigoCliente]
   );
 
-  const [paises, divisiones1, divisiones2, divisiones3, condiciones, niveles, subtipos, actividades] = await Promise.all([
+  // Divisiones (opción B, utils/divisiones): departamentos, municipios de la reforma y distritos
+  // (DIVISION_GEOGRAFICA2 del ERP con su municipio según FR_DISTRITO).
+  const [paises, divisiones1, municipios, distritos, condiciones, niveles, subtipos, actividades] = await Promise.all([
     db.getAllAsync(
       `SELECT COD_PAIS AS codigo, NOMBRE AS descripcion, ETIQUETA_DIV_GEO1 AS etiqueta1,
               ETIQUETA_DIV_GEO2 AS etiqueta2
@@ -49,15 +52,17 @@ export async function getDatosPedido(codigoCliente, ruta) {
          FROM DIVISION_GEOGRAFICA1 ORDER BY NOMBRE`
     ),
     db.getAllAsync(
-      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS codigo,
-              NOMBRE AS descripcion
-         FROM DIVISION_GEOGRAFICA2 ORDER BY NOMBRE`
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, MUNICIPIO AS codigo, NOMBRE AS descripcion
+         FROM FR_MUNICIPIO ORDER BY NOMBRE`
     ),
-    // Distritos: vacío mientras el servidor no mande el catálogo (divisiones3).
     db.getAllAsync(
-      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS division2,
-              DIVISION_GEOGRAFICA3 AS codigo, NOMBRE AS descripcion
-         FROM DIVISION_GEOGRAFICA3 ORDER BY NOMBRE`
+      `SELECT d.PAIS AS pais, d.DIVISION_GEOGRAFICA1 AS division1, d.DIVISION_GEOGRAFICA2 AS codigo,
+              d.NOMBRE AS descripcion, f.MUNICIPIO AS municipio
+         FROM DIVISION_GEOGRAFICA2 d
+         LEFT JOIN FR_DISTRITO f
+                ON f.PAIS = d.PAIS AND f.DIVISION_GEOGRAFICA1 = d.DIVISION_GEOGRAFICA1
+               AND f.DIVISION_GEOGRAFICA2 = d.DIVISION_GEOGRAFICA2
+        ORDER BY d.NOMBRE`
     ),
     db.getAllAsync('SELECT COD_CND AS codigo, DES_CND AS descripcion FROM alFAC_CND_PAG ORDER BY DES_CND'),
     // El nivel se identifica por nombre (NIVEL_PRECIO); un nombre con varias monedas sale una vez.
@@ -80,6 +85,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
           pais: cc.COD_PAIS,
           division1: cc.DIVISION_GEOGRAFICA1,
           division2: cc.DIVISION_GEOGRAFICA2,
+          // Municipio de la reforma (opción B); solo sirve para filtrar distritos.
           division3: cc.DIVISION_GEOGRAFICA3,
           condicionPago: cc.COD_CND,
           nivelPrecio: cc.NIVEL_PRECIO,
@@ -97,8 +103,8 @@ export async function getDatosPedido(codigoCliente, ruta) {
       : null,
     paises,
     divisiones1,
-    divisiones2,
-    divisiones3,
+    municipios,
+    distritos,
     condiciones,
     niveles,
     subtipos,
@@ -119,16 +125,17 @@ export function faltantesEncabezado(valores) {
 }
 
 // Encabezado que recibe PedidoArticulosView. datos = getDatosPedido; valores = lo elegido en
-// PedidoView (pais, division1, division2, division3, condicionPago, nivelPrecio, subtipo, actividadComercial,
+// PedidoView (pais, division1, municipio, division2, condicionPago, nivelPrecio, subtipo, actividadComercial,
 // creditoFiscal, sugeridoVenta, inicio).
 export function armarEncabezado(datos, valores) {
   const c = datos.cliente;
   return {
     pais: valores.pais,
     division1: valores.division1,
+    // Distrito (código del ERP) -> COD_GEO2. El municipio de la reforma solo sirve en la pantalla
+    // para filtrar distritos: alFAC_ENC_PED no tiene columna para guardarlo.
     division2: valores.division2,
-    // Distrito: solo para la pantalla; alFAC_ENC_PED no tiene columna para guardarlo.
-    division3: valores.division3 ?? null,
+    municipio: valores.municipio ?? null,
     condicionPago: valores.condicionPago,
     nivelPrecio: valores.nivelPrecio,
     subtipo: valores.subtipo,
@@ -358,9 +365,78 @@ export async function getCotizacionesCliente(cliente, ruta) {
     oi: r.MON_IMP_CS ?? 0,
     total: r.MON_CIV ?? 0,
     moneda: r.MONEDA,
-    // false = solo está en el equipo (falta Enviar Datos); el PDF se arma en el servidor.
+    // false = solo está en el equipo (falta Enviar Datos); su PDF se arma en el equipo.
     enviada: r.ENVIADO === 1,
   }));
+}
+
+// Todo lo que lleva el PDF del pedido / cotización, leído de la base local (mismos datos que arma el
+// backend en controllers/fr/cotizacionPdf.js). null si el documento ya no está en el equipo (se borra
+// en Cargar datos una vez enviado). ruta: COD_ZON. numero: NUM_PED.
+//   { encabezado: fila de alFAC_ENC_PED + NOM_CLT, DIR_CLT, NOM_CTO, NUM_TEL, RUTA_DESCRIPCION, DES_CND,
+//                 DETA_EMB,
+//     lineas: [fila de alFAC_DET_PED + DES_ART] por NUM_LN,
+//     lotesPorArticulo: Map COD_ART -> [{ lote, vence ('YYYY-MM-DD...') }] (lotes con existencia en
+//                       COD_BOD, el que vence primero va primero),
+//     empresa: fila de EMPRESA o null }
+export async function getDocumentoPdf(ruta, numero) {
+  const db = await getDatabase();
+  const encabezado = await db.getFirstAsync(
+    `SELECT P.*,
+            (SELECT C.NOM_CLT FROM CLIENTE C WHERE C.COD_CLT = P.COD_CLT ORDER BY C.COD_ZON = P.COD_ZON DESC LIMIT 1) AS NOM_CLT,
+            (SELECT C.DIR_CLT FROM CLIENTE C WHERE C.COD_CLT = P.COD_CLT ORDER BY C.COD_ZON = P.COD_ZON DESC LIMIT 1) AS DIR_CLT,
+            (SELECT CC.NOM_CTO FROM CLIENTE_CIA CC WHERE CC.COD_CLT = P.COD_CLT LIMIT 1) AS NOM_CTO,
+            (SELECT CC.NUM_TEL FROM CLIENTE_CIA CC WHERE CC.COD_CLT = P.COD_CLT LIMIT 1) AS NUM_TEL,
+            (SELECT R.DESCRIPCION FROM RUTA_RT R WHERE R.RUTA = P.COD_ZON LIMIT 1) AS RUTA_DESCRIPCION,
+            (SELECT CP.DES_CND FROM alFAC_CND_PAG CP WHERE CP.COD_CND = P.COD_CND LIMIT 1) AS DES_CND,
+            (SELECT DE.DETA_EMB FROM alFAC_DIR_EMB_CLT DE
+              WHERE DE.COD_CLT = P.COD_CLT AND DE.DIR_EMB = P.DIR_ENT LIMIT 1) AS DETA_EMB,
+            -- Cotización aprobada en el equipo sin enviar: en el servidor todavía es cotización.
+            EXISTS (SELECT 1 FROM COTIZACION_APROBACION A
+                     WHERE A.COD_ZON = P.COD_ZON AND A.NUM_PED = P.NUM_PED AND A.ENVIADO = 0) AS APROBACION_PENDIENTE
+       FROM alFAC_ENC_PED P
+      WHERE P.COD_ZON = ? AND P.NUM_PED = ?`,
+    [ruta, numero]
+  );
+  if (!encabezado) return null;
+
+  // alFAC_DET_PED no tiene COD_ZON: se une por compañía y número (COD_CIA puede venir null).
+  const [lineas, lotes, empresa] = await Promise.all([
+    db.getAllAsync(
+      `SELECT D.*, (SELECT A.DES_ART FROM ARTICULO A WHERE A.COD_ART = D.COD_ART LIMIT 1) AS DES_ART
+         FROM alFAC_DET_PED D
+        WHERE D.NUM_PED = ? AND D.COD_CIA IS ?
+        ORDER BY D.NUM_LN`,
+      [numero, encabezado.COD_CIA]
+    ),
+    // Un lote en varias localizaciones de la bodega sale una vez (solo si suma existencia).
+    db.getAllAsync(
+      `SELECT ARTICULO, LOTE, FECHA_VENCIMIENTO
+         FROM ARTICULO_EXISTENCIA_LOTE
+        WHERE BODEGA = ?
+          AND ARTICULO IN (SELECT COD_ART FROM alFAC_DET_PED WHERE NUM_PED = ? AND COD_CIA IS ?)
+        GROUP BY ARTICULO, LOTE, FECHA_VENCIMIENTO
+       HAVING SUM(EXISTENCIA) > 0
+        ORDER BY ARTICULO, FECHA_VENCIMIENTO, LOTE`,
+      [encabezado.COD_BOD, numero, encabezado.COD_CIA]
+    ),
+    db.getFirstAsync('SELECT * FROM EMPRESA LIMIT 1'),
+  ]);
+
+  const lotesPorArticulo = new Map();
+  for (const l of lotes) {
+    if (!lotesPorArticulo.has(l.ARTICULO)) lotesPorArticulo.set(l.ARTICULO, []);
+    lotesPorArticulo.get(l.ARTICULO).push({ lote: l.LOTE, vence: l.FECHA_VENCIMIENTO });
+  }
+  return { encabezado, lineas, lotesPorArticulo, empresa: empresa ?? null };
+}
+
+// Compañía del cliente (CLIENTE_CIA.COD_CIA), para pedir al servidor el PDF de un documento que ya no
+// está en el equipo. null si no se conoce.
+export async function getCompaniaCliente(cliente) {
+  const db = await getDatabase();
+  const fila = await db.getFirstAsync('SELECT COD_CIA FROM CLIENTE_CIA WHERE COD_CLT = ? LIMIT 1', [cliente]);
+  return fila?.COD_CIA ?? null;
 }
 
 // Aprueba una cotización: pasa a pedido (TIP_DOC 'F') con FEC_PED = día de aprobación y FEC_DES =

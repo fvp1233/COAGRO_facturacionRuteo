@@ -34,6 +34,7 @@ import {
 import { getPromocionesCliente, mejorPromocion, promocionesDeArticulo } from '../../repositories/promociones';
 import { guardarPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
+import { imprimirPedido } from '../../services/pedidoPdf';
 import { formatCantidad, formatFechaDoc, formatMontoMoneda as monto, formatPorcentaje } from '../../utils/formato';
 import { normalizar } from '../../utils/text';
 import { colors, radius, spacing } from '../../theme';
@@ -83,14 +84,16 @@ function normalizarDetalle(linea, factor) {
 // Totales de una línea. El vendedor escribe almacén (enteros) y detalle (fracción del almacén,
 // solo si FACTOR_VENTA > 1). Cantidad = almacén + detalle / FACTOR_VENTA, en unidades de almacén.
 // PRECIO es por unidad de almacén. Existencia también viene en unidades de almacén (1.5 = 1 barril y medio).
-// Descuento = % de línea (PEDIDO_LINEA.PORC_DESCUENTO). Mientras el vendedor no lo escriba se llena
-// solo con el beneficio que deja el PRECIO MÁS BAJO (no se suman), entre:
+// Descuento = % de línea (PEDIDO_LINEA.PORC_DESCUENTO). Estrategia de venta: el vendedor lo negocia
+// con el contador (de 1 en 1, empieza en 0) y NO puede pasar del TOPE, que no se muestra de entrada.
+// Tope = el beneficio que deja el PRECIO MÁS BAJO (no se suman), entre:
 //   - el descuento del cliente por artículo (DESCUENTO_CLIART, TIPO 'P', vigente hoy y la cantidad
 //     entre CANT_MIN y CANT_MAX), y
 //   - las promociones vigentes del artículo (FR_PROMOCION_PRODUCTO con cantidad >= CANTIDAD_MIN):
 //     DESCUENTO (%) o PRECIO_ESPECIAL convertido a % sobre el precio de lista.
-// Si ninguno aplica, el % general del cliente. Lo que el vendedor escriba tiene prioridad.
-// regla = DESCUENTO_CLIART que cumple; promo = mejor promoción que cumple; ganador = el aplicado.
+// Si ninguno aplica, el % general del cliente. Si la cantidad cambia y el tope baja, el % elegido se
+// recorta al nuevo tope. regla = DESCUENTO_CLIART que cumple; promo = mejor promoción que cumple;
+// ganador = el que define el tope.
 // Adicional = impuestos del artículo sobre el subtotal con descuento: IMPUESTO1 menos la exención de
 // ventas del cliente e IMPUESTO2 menos la de consumo. Inventario = existencia − lo pedido.
 function calcular(articulo, linea, cliente, reglas, hoy, promos) {
@@ -105,8 +108,8 @@ function calcular(articulo, linea, cliente, reglas, hoy, promos) {
         ? { fuente: 'cliente', porc: regla.monto }
         : null;
   // 4 decimales: un precio especial convertido a % puede dar decimales largos.
-  const automatico = ganador ? Math.round(ganador.porc * 10000) / 10000 : cliente.descuento;
-  const porcDescuento = Math.min(100, Math.max(0, linea.descuento == null ? automatico : valor(linea.descuento)));
+  const tope = Math.min(100, Math.max(0, ganador ? Math.round(ganador.porc * 10000) / 10000 : Number(cliente.descuento) || 0));
+  const porcDescuento = Math.min(tope, Math.max(0, valor(linea.descuento)));
   const descuento = (subtotal * porcDescuento) / 100;
   const base = subtotal - descuento;
   const iva = (base * articulo.impuesto1 * (100 - cliente.exentoVentas)) / 10000;
@@ -116,12 +119,13 @@ function calcular(articulo, linea, cliente, reglas, hoy, promos) {
   const adicional = iva + oi;
   const total = base + adicional;
   const inventario = articulo.existencia - cantidad - BONIFICACION;
-  return { cantidad, subtotal, regla, promo, ganador, automatico, porcDescuento, descuento, iva, oi, exoneracion, adicional, total, inventario };
+  return { cantidad, subtotal, regla, promo, ganador, tope, porcDescuento, descuento, iva, oi, exoneracion, adicional, total, inventario };
 }
 
 // Card de un artículo: código, descripción, precio por unidad de almacén y existencia. Si ya está en
 // el pedido se marca con su cantidad (al tocarla se carga lo capturado para corregirlo).
 // descuento: mayor % vigente hoy del cliente para el artículo (DESCUENTO_CLIART); null si no tiene.
+// La card solo marca "Desc." (sin el %: el tope no se muestra de entrada).
 // promo: true si el artículo está en alguna promoción vigente del cliente.
 const ArticuloCard = memo(function ArticuloCard({ articulo, agregado, descuento, promo, onPress }) {
   const sinExistencia = articulo.existencia <= 0;
@@ -144,7 +148,7 @@ const ArticuloCard = memo(function ArticuloCard({ articulo, agregado, descuento,
           {descuento ? (
             <View style={styles.descChip}>
               <Feather name="tag" size={11} color={colors.onPrimary} />
-              <Text style={styles.descChipText}>{formatPorcentaje(descuento)}</Text>
+              <Text style={styles.descChipText}>Desc.</Text>
             </View>
           ) : null}
           {promo ? (
@@ -189,6 +193,46 @@ function Campo({ label, value, onChange, onBlur, entero = false, disabled = fals
   );
 }
 
+// Pasos del contador de descuento: de 1 en 1, y el último llega justo al tope aunque tenga decimales
+// (12.35% -> ... 11, 12, 12.35). Al bajar desde un decimal se vuelve al entero anterior (12.35 -> 12).
+const subirDescuento = (actual, tope) => Math.min(tope, Math.floor(actual + 1e-9) + 1);
+const bajarDescuento = (actual) => Math.max(0, Math.ceil(actual - 1e-9) - 1);
+
+// Descuento % con contador [ − ] 5% [ + ]: empieza en 0 y el + se bloquea al llegar al tope, que no
+// se muestra hasta alcanzarlo (estrategia de venta: negociar desde abajo, no dar siempre el máximo).
+// valor: % elegido (ya recortado al tope). montoTexto: el descuento en dinero.
+function ContadorDescuento({ valor: actual, tope, montoTexto, onChange }) {
+  const sinDescuento = tope <= 0;
+  const enTope = !sinDescuento && actual >= tope - 1e-9;
+  const Boton = ({ icono, disabled, onPress }) => (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      style={({ pressed }) => [styles.contadorBoton, disabled && styles.contadorBotonOff, pressed && styles.pressed]}
+    >
+      <Feather name={icono} size={18} color={disabled ? colors.textDisabled : colors.onPrimary} />
+    </Pressable>
+  );
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label} numberOfLines={1}>{`Descuento % (${montoTexto})`}</Text>
+      <View style={styles.contador}>
+        <Boton icono="minus" disabled={actual <= 0} onPress={() => onChange(bajarDescuento(actual))} />
+        <Text style={[styles.contadorValor, sinDescuento && styles.contadorValorOff]}>
+          {formatPorcentaje(Math.round(actual * 100) / 100)}
+        </Text>
+        <Boton icono="plus" disabled={sinDescuento || enTope} onPress={() => onChange(subirDescuento(actual, tope))} />
+      </View>
+      {sinDescuento ? (
+        <Text style={styles.contadorNota}>Sin descuento disponible</Text>
+      ) : enTope ? (
+        <Text style={styles.contadorNota}>Máximo permitido</Text>
+      ) : null}
+    </View>
+  );
+}
+
 function Dato({ label, value, alerta = false }) {
   return (
     <View style={styles.field}>
@@ -198,40 +242,30 @@ function Dato({ label, value, alerta = false }) {
   );
 }
 
-// Aviso de descuentos y promociones del artículo en la captura:
-// - verde: el beneficio aplicado al campo Descuento (el que deja el precio más bajo; no se suman).
-// - ámbar: lo que aún no aplica por la cantidad (rangos de DESCUENTO_CLIART, CANTIDAD_MIN de promociones).
+// Aviso de descuentos y promociones del artículo en la captura. NO muestra porcentajes ni precios
+// especiales (el tope se descubre solo con el contador):
+// - verde: hay descuento disponible para la cantidad (el que deja el precio más bajo; no se suman).
+// - ámbar: lo que aún no aplica por la cantidad (desde qué cantidad hay descuento o promoción).
 // - bonificación de la promoción que cumple: solo informativa (va aparte de los descuentos).
-// manual: el vendedor escribió otro %; se ofrece volver al automático.
-function AvisoDescuento({ calculo, vigentes, promos, precio, moneda, manual, empAlm, onAutomatico }) {
+function AvisoDescuento({ calculo, vigentes, promos, empAlm }) {
   const und = empAlm || 'unid.';
-  const rango = (r) => `${formatCantidad(r.cantMin)} a ${formatCantidad(r.cantMax)} ${und}`;
   const { regla, promo, ganador, cantidad } = calculo;
-  const textoPromo = ({ promo: p, producto }) =>
-    Number(producto.descuento) > 0
-      ? `«${p.titulo || `Promoción ${p.id}`}» ${formatPorcentaje(producto.descuento)}`
-      : `«${p.titulo || `Promoción ${p.id}`}» precio especial ${monto(producto.precioEspecial, moneda)}`;
+  const nombrePromo = ({ promo: p }) => `«${p.titulo || `Promoción ${p.id}`}»`;
 
   const aplicado = ganador
     ? ganador.fuente === 'promocion'
-      ? `Promoción aplicada: ${textoPromo(promo)}${
-          Number(promo.producto.descuento) > 0 ? '' : ` (${formatPorcentaje(Math.round(promo.porc * 100) / 100)})`
-        }.`
-      : `Descuento del cliente: ${formatPorcentaje(regla.monto)} (de ${rango(regla)}, vigente hasta ${formatFechaDoc(regla.fechaFin)}).`
+      ? `Promoción ${nombrePromo(promo)} disponible para esta cantidad: ajusta el descuento con el contador.`
+      : `Hay descuento del cliente para esta cantidad (vigente hasta ${formatFechaDoc(regla.fechaFin)}): ajusta el descuento con el contador.`
     : null;
 
   const pendientes = [];
   if (!regla && vigentes.length) {
-    pendientes.push(
-      `Descuento del cliente: ${[...vigentes]
-        .sort((a, b) => a.cantMin - b.cantMin)
-        .map((r) => `${formatPorcentaje(r.monto)} de ${rango(r)}`)
-        .join('; ')}.`
-    );
+    const desde = Math.min(...vigentes.map((r) => Number(r.cantMin) || 0));
+    pendientes.push(`Descuento del cliente desde ${formatCantidad(desde)} ${und}.`);
   }
   for (const c of promos) {
     if (cantidad < (Number(c.producto.cantidadMin) || 0)) {
-      pendientes.push(`${textoPromo(c)} desde ${formatCantidad(c.producto.cantidadMin)} ${und}.`);
+      pendientes.push(`${nombrePromo(c)} desde ${formatCantidad(c.producto.cantidadMin)} ${und}.`);
     }
   }
   const noSuman = regla && promo ? 'Hay descuento del cliente y promoción: no se suman, se aplica el de menor precio.' : null;
@@ -257,11 +291,6 @@ function AvisoDescuento({ calculo, vigentes, promos, precio, moneda, manual, emp
             {c.promo.bonificadoDescripcion || c.promo.articuloBonificado} (va aparte).
           </Text>
         ))}
-        {ganador && manual ? (
-          <Pressable onPress={onAutomatico} hitSlop={6}>
-            <Text style={styles.descAvisoLink}>Usar {formatPorcentaje(Math.round(ganador.porc * 100) / 100)}</Text>
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );
@@ -301,8 +330,8 @@ export default function PedidoArticulosView({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const listaRef = useRef(null);
-  // Lo que se está capturando del artículo seleccionado: { almacen, detalle, descuento (textos;
-  // descuento ausente = % general del cliente), canastaBasica }.
+  // Lo que se está capturando del artículo seleccionado: { almacen, detalle (textos), descuento
+  // (% elegido con el contador; ausente = 0), canastaBasica }.
   const [borrador, setBorrador] = useState({});
   // Líneas agregadas al pedido, en orden: { codigo, descripcion, moneda, precio, almacen, detalle,
   // cantidad (en unidades de almacén), cantidadTexto, porcDescuento, canastaBasica, subtotal,
@@ -466,7 +495,8 @@ export default function PedidoArticulosView({
       Alert.alert('Agregar artículo', 'Escribe la cantidad en almacén o en detalle.');
       return;
     }
-    const final = normalizarDetalle(linea, articulo.factorVenta);
+    // El % se guarda ya recortado al tope (al volver a abrir la línea se carga ese valor).
+    const final = { ...normalizarDetalle(linea, articulo.factorVenta), descuento: calculo.porcDescuento };
     const nueva = {
       codigo: articulo.codigo,
       descripcion: articulo.descripcion,
@@ -545,7 +575,17 @@ export default function PedidoArticulosView({
         tipoDoc: tipo.tipoDoc,
       });
       setVerResumen(false);
-      Alert.alert(tipo.guardado, `Se guardó ${tipo.el} ${numero}.`);
+      // Recién guardado no está en el servidor: el PDF se arma en el equipo (sirve sin conexión).
+      Alert.alert(tipo.guardado, `Se guardó ${tipo.el} ${numero}.`, [
+        { text: 'Aceptar', style: 'cancel' },
+        {
+          text: 'Imprimir',
+          onPress: () =>
+            imprimirPedido({ ruta, numero }).catch((e) =>
+              Alert.alert('No se pudo generar el PDF', e?.message || 'Intenta de nuevo.')
+            ),
+        },
+      ]);
       await onGuardado?.(numero);
     } catch (e) {
       Alert.alert(`No se pudo guardar ${tipo.el}`, e?.message || 'Error al insertar en la base local.');
@@ -721,9 +761,10 @@ export default function PedidoArticulosView({
                       label={`Precio${articulo.empAlm ? ` (${articulo.empAlm})` : ''}`}
                       value={monto(articulo.precio, articulo.moneda)}
                     />
-                    <Campo
-                      label={`Descuento % (${monto(calculo.descuento, articulo.moneda)})`}
-                      value={linea.descuento ?? (calculo.automatico ? String(calculo.automatico) : '')}
+                    <ContadorDescuento
+                      valor={calculo.porcDescuento}
+                      tope={calculo.tope}
+                      montoTexto={monto(calculo.descuento, articulo.moneda)}
                       onChange={cambiar('descuento')}
                     />
                     <Dato label="Bonificación" value={formatCantidad(BONIFICACION)} />
@@ -738,13 +779,7 @@ export default function PedidoArticulosView({
                       calculo={calculo}
                       vigentes={vigentesArticulo}
                       promos={promosArticulo}
-                      precio={articulo.precio}
-                      moneda={articulo.moneda}
-                      manual={linea.descuento != null}
                       empAlm={articulo.empAlm}
-                      onAutomatico={() =>
-                        setBorrador(({ descuento: _manual, ...resto }) => resto)
-                      }
                     />
                   ) : null}
 
@@ -868,7 +903,29 @@ const styles = StyleSheet.create({
   descAvisoPend: { borderColor: colors.warning },
   descAvisoTexts: { flex: 1, gap: 4 },
   descAvisoText: { fontSize: 12, color: colors.text },
-  descAvisoLink: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  // Contador del descuento: [ − ] 5% [ + ].
+  contador: {
+    height: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: radius.sm + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 4,
+  },
+  contadorBoton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  contadorBotonOff: { backgroundColor: colors.surface },
+  contadorValor: { fontSize: 16, fontWeight: '700', color: colors.text },
+  contadorValorOff: { color: colors.textDisabled },
+  contadorNota: { fontSize: 11, color: colors.textMuted },
   // Card del artículo.
   artCard: {
     flexDirection: 'row',

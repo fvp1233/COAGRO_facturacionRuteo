@@ -11,9 +11,17 @@ export function descargarDocumentoPdf(numero) {
   return descargarPdf(PATHS.dtePdf(numero), numero, `Documento ${numero}`);
 }
 
-// Igual, para una cotización ya enviada al servidor (llave COD_CIA + NUM_PED).
-export function descargarCotizacionPdf(cia, numero) {
-  return descargarPdf(PATHS.cotizacionPdf(cia, numero), `Cotizacion_${numero}`, `Cotización ${numero}`);
+// Igual, para un pedido o cotización ya enviado al servidor (llave COD_CIA + NUM_PED). Normalmente se
+// usa imprimirPedido (services/pedidoPdf), que si no se puede arma el PDF en el equipo.
+export function descargarPedidoPdf(cia, numero, esCotizacion) {
+  const tipo = esCotizacion ? 'Cotización' : 'Pedido';
+  return descargarPdf(PATHS.cotizacionPdf(cia, numero), `${esCotizacion ? 'Cotizacion' : 'Pedido'}_${numero}`, `${tipo} ${numero}`);
+}
+
+// Igual, para el recibo de cobro de un documento ya enviado (NUM_DEP + CTA_BCO, una página: numDoc).
+// Normalmente se usa imprimirRecibo (services/reciboPdf), que si no se puede lo arma en el equipo.
+export function descargarReciboPdf(numDep, ctaBco, numDoc) {
+  return descargarPdf(PATHS.reciboPdf(numDep, ctaBco, numDoc), `Recibo_${numDep}`, `Recibo ${numDep}`);
 }
 
 async function descargarPdf(path, nombre, titulo) {

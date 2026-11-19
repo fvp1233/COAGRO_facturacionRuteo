@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import { ACTIVIDAD, getResumenDia } from '../../repositories/actividad';
+import { getRecibo } from '../../repositories/pagos';
+import { imprimirPedido } from '../../services/pedidoPdf';
+import { imprimirRecibo } from '../../services/reciboPdf';
 import { formatFechaDoc, formatMonto } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
@@ -55,8 +58,11 @@ function Tile({ icono, titulo, valor, sub, activo, onPress }) {
   );
 }
 
-// Card de un registro de la línea de tiempo (visita o documento).
-function ItemCard({ item }) {
+// Documentos de la línea de tiempo que tienen PDF (pedido / cotización / recibo): al tocarlos se imprimen.
+const CON_PDF = new Set([ACTIVIDAD.pedido, ACTIVIDAD.cotizacion, ACTIVIDAD.aprobacion, ACTIVIDAD.cobro]);
+
+// Card de un registro de la línea de tiempo (visita o documento). onImprimir(item): solo documentos con PDF.
+function ItemCard({ item, onImprimir }) {
   const t = TIPOS[item.tipo];
   let titulo = t.titulo;
   let lineas = [];
@@ -78,8 +84,13 @@ function ItemCard({ item }) {
     derecha = formatMonto(item.monto);
   }
   const colorBorde = item.tipo === 'visitas' && !item.efectiva ? colors.warning : t.color;
+  const imprimible = CON_PDF.has(item.tipo) && Boolean(item.documento) && onImprimir;
   return (
-    <View style={[styles.item, { borderLeftColor: colorBorde }]}>
+    <Pressable
+      disabled={!imprimible}
+      onPress={() => onImprimir(item)}
+      style={({ pressed }) => [styles.item, { borderLeftColor: colorBorde }, pressed && styles.pressed]}
+    >
       <View style={[styles.itemIcono, { backgroundColor: `${t.color}1A` }]}>
         <MaterialCommunityIcons name={t.icono} size={18} color={t.color} />
       </View>
@@ -95,8 +106,9 @@ function ItemCard({ item }) {
       <View style={styles.itemDerecha}>
         {derecha ? <Text style={styles.itemMonto}>{derecha}</Text> : null}
         <Text style={styles.itemHora}>{hora(item.hora)}</Text>
+        {imprimible ? <Feather name="printer" size={14} color={colors.textMuted} /> : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -111,6 +123,32 @@ export default function MiDiaReporteView({ onBack }) {
   const [error, setError] = useState('');
   const [filtro, setFiltro] = useState(FILTROS.todo);
   const [verPendientes, setVerPendientes] = useState(false);
+  const imprimiendo = useRef(false);
+
+  // PDF del documento: del servidor si ya se envió y hay conexión; si no, se arma en el equipo.
+  const imprimir = async (item) => {
+    if (imprimiendo.current) return;
+    imprimiendo.current = true;
+    try {
+      if (item.tipo === ACTIVIDAD.cobro) {
+        // La clave del cobro es el ID del pago (COBRO_PAGO).
+        const recibo = await getRecibo(Number(item.clave));
+        if (!recibo) throw new Error('El recibo ya no está en el equipo.');
+        await imprimirRecibo(recibo);
+        return;
+      }
+      await imprimirPedido({
+        ruta: item.ruta,
+        numero: item.documento,
+        cliente: item.cliente,
+        cotizacion: item.tipo === ACTIVIDAD.cotizacion,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo generar el PDF', e?.message || 'Intenta de nuevo.');
+    } finally {
+      imprimiendo.current = false;
+    }
+  };
 
   const cargar = useCallback(async () => {
     try {
@@ -314,7 +352,7 @@ export default function MiDiaReporteView({ onBack }) {
               ) : null}
             </View>
             {items.length ? (
-              items.map((i) => <ItemCard key={`${i.tipo}|${i.clave ?? `${i.ruta}|${i.cliente}|${i.inicio}`}`} item={i} />)
+              items.map((i) => <ItemCard key={`${i.tipo}|${i.clave ?? `${i.ruta}|${i.cliente}|${i.inicio}`}`} item={i} onImprimir={imprimir} />)
             ) : (
               <View style={styles.empty}>
                 <Feather name="sun" size={28} color={colors.textDisabled} />

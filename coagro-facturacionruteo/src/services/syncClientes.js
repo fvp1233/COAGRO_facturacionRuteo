@@ -162,8 +162,8 @@ export async function descargarClientes() {
       await db.runAsync(
         `INSERT OR REPLACE INTO CLIENTE
            (COD_CLT, NOM_CLT, DIR_CLT, FEC_PLN, COD_ZON, DESGLOSE, TIPO_IMPUESTO, TIPO_TARIFA, PORC_TARIFA,
-            NIVEL_PRECIO)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            NIVEL_PRECIO, ALIAS)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           textOr(c.COD_CLT),
           textOr(c.NOM_CLT),
@@ -176,6 +176,7 @@ export async function descargarClientes() {
           num(c.PORC_TARIFA),
           // El backend lo manda como nivel_precio; se acepta también en mayúscula como el resto.
           text(c.nivel_precio ?? c.NIVEL_PRECIO),
+          text(c.ALIAS),
         ]
       );
     }

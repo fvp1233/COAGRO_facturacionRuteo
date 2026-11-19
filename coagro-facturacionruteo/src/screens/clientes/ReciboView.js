@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import { eliminarPagoSinRecibo, getRecibo } from '../../repositories/pagos';
-import { compartirReciboPdf, filasRecibo, partesFecha, textoCuenta } from '../../services/reciboPdf';
+import { imprimirRecibo, filasRecibo, partesFecha, textoCuenta } from '../../services/reciboPdf';
 import { formatMonto } from '../../utils/formato';
 import { montoALetras } from '../../utils/numeroALetras';
 import { colors, radius, spacing } from '../../theme';
@@ -82,7 +82,7 @@ export default function ReciboView({ idPago, onBack }) {
     if (!recibo || generando) return;
     setGenerando(true);
     try {
-      await compartirReciboPdf(recibo);
+      await imprimirRecibo(recibo);
     } catch (e) {
       Alert.alert('No se pudo generar el PDF', e?.message || 'Intenta de nuevo.');
     } finally {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ConnectionScreen from './src/screens/ConnectionScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -11,10 +11,9 @@ import ReportesScreen from './src/screens/ReportesScreen';
 import ParametrosScreen from './src/screens/ParametrosScreen';
 import CalendarioScreen from './src/screens/CalendarioScreen';
 import MetasScreen from './src/screens/MetasScreen';
-import { configExists, deleteConfig } from './src/services/localConfig';
+import { configExists } from './src/services/localConfig';
 import { clearSession } from './src/services/session';
-import { clearToken } from './src/services/tokenStore';
-import { databaseExists, resetDatabase } from './src/db/database';
+import { databaseExists } from './src/db/database';
 import { colors } from './src/theme';
 
 // Navegación temporal de prueba: se reemplazará por un navegador real (Expo Router).
@@ -32,30 +31,6 @@ export default function App() {
     setScreen(firstUse ? 'connection' : 'login');
   }, []);
 
-  // SOLO DESARROLLO: mantener presionado el logo ~1.5 s borra el JSON y la base local
-  // y vuelve a la pantalla de Conexión (primer uso). No existe en la versión final.
-  const handleDevReset = () => {
-    Alert.alert(
-      'Reiniciar datos locales',
-      'Se borrarán la configuración (JSON), el token y la base SQLite de este dispositivo. Solo para desarrollo.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Borrar todo',
-          style: 'destructive',
-          onPress: async () => {
-            await resetDatabase();
-            await clearToken();
-            clearSession();
-            deleteConfig();
-            setScreen('connection');
-          },
-        },
-      ],
-    );
-  };
-  const devReset = __DEV__ ? handleDevReset : undefined;
-
   const renderScreen = () => {
     switch (screen) {
       case 'loading':
@@ -65,9 +40,9 @@ export default function App() {
           </View>
         );
       case 'connection':
-        return <ConnectionScreen onConnect={() => setScreen('login')} onDevReset={devReset} />;
+        return <ConnectionScreen onConnect={() => setScreen('login')} />;
       case 'login':
-        return <LoginScreen onLogin={() => setScreen('home')} onDevReset={devReset} />;
+        return <LoginScreen onLogin={() => setScreen('home')} />;
       case 'module':
         if (activeModule.id === 'clientes') {
           return <ClientesScreen onBack={() => setScreen('home')} />;

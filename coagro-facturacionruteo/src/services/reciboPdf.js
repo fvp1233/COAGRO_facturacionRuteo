@@ -5,6 +5,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { formatMonto } from '../utils/formato';
 import { montoALetras } from '../utils/numeroALetras';
 import { LOGO_COAGRO } from '../assets/logoCoagroPdf';
+import { descargarReciboPdf } from './documentoPdf';
 
 // Recibo de cobro en PDF con el diseño de la cotización (logo de Coagro, colores verdes): se genera
 // en el equipo con expo-print y se abre el menú del sistema para guardarlo, compartirlo o imprimirlo.
@@ -290,7 +291,26 @@ function borrarRecibosEnCache() {
   }
 }
 
-// Genera el PDF del recibo y abre el menú para compartirlo.
+// PDF del recibo con dos modos (como el del pedido, services/pedidoPdf):
+//  - Servidor: si el recibo ya está enviado y control aún no lo aplica, se descarga el PDF del backend
+//    (GET /fr/mobile/recibo/:numDep/pdf, misma plantilla: utils/reciboHtml.js).
+//  - Equipo: si no se ha enviado, ya está aplicado (el servidor ya no puede reconstruir los saldos;
+//    el equipo los guardó al cobrar), no hay conexión o el servidor falla, se arma aquí.
+// Devuelve 'servidor' o 'equipo'.
+export async function imprimirRecibo(recibo) {
+  if (recibo.recibo && recibo.enviado && !recibo.aplicado && recibo.cuenta) {
+    try {
+      await descargarReciboPdf(recibo.recibo, recibo.cuenta, recibo.documento);
+      return 'servidor';
+    } catch {
+      // sin conexión, sesión vencida o error del servidor: se arma en el equipo
+    }
+  }
+  await compartirReciboPdf(recibo);
+  return 'equipo';
+}
+
+// Genera el PDF del recibo en el equipo y abre el menú para compartirlo.
 // expo-print deja el PDF en una carpeta propia que ni expo-sharing ni expo-file-system pueden leer
 // (sobre todo en Expo Go: "Not allowed to read file" / "missing read permission"). Por eso se pide
 // el PDF en base64 y se escribe en la caché de la app (como documentoPdf); se comparte esa copia.

@@ -8,6 +8,7 @@ import SelectField from '../../components/ui/SelectField';
 import { getClienteConsulta } from '../../repositories/clientes';
 import {
   CAMPOS_CLIENTE,
+  CAMPOS_DIVISION,
   getCamposPendientes,
   getOpcionesEdicion,
   guardarCambiosCliente,
@@ -16,6 +17,7 @@ import {
 import { enviarPendientes } from '../../services/enviarDatos';
 import { isNetworkError } from '../../services/api';
 import { formatCantidad, formatMonto, formatPorcentaje } from '../../utils/formato';
+import { departamentosDe, distritosDe, municipioDeDistrito, municipiosDe } from '../../utils/divisiones';
 import { colors, radius, spacing } from '../../theme';
 
 const NO_DISPONIBLE = 'No disponible';
@@ -49,6 +51,7 @@ const codigoYNombre = (codigo, nombre) => (codigo ? (nombre ? `${codigo} - ${nom
 // Valor crudo de cada campo editable (de la base local), el que se carga en el formulario.
 const VALOR_CRUDO = {
   NOM_CLT: (d) => d.nombre,
+  ALIAS: (d) => d.alias,
   DIR_CLT: (d) => d.direccion,
   NOM_CTO: (d) => d.contacto,
   NUM_TEL: (d) => d.telefono,
@@ -107,7 +110,8 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [pendientes, setPendientes] = useState(new Set());
+  // Campos con cambios sin enviar: Map CAMPO -> error del servidor (o null).
+  const [pendientes, setPendientes] = useState(new Map());
   const [catalogos, setCatalogos] = useState({});
   // Modo edición: borrador = valores del formulario; inicial = los que tenía al abrirlo.
   const [editando, setEditando] = useState(false);
@@ -150,10 +154,25 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   // Los datos de CLIENTE_CIA solo se editan si el cliente tiene fila (datos comerciales).
   const esEditable = (campo) => CAMPOS_CLIENTE[campo].tabla !== 'CLIENTE_CIA' || Boolean(datos?.tieneDatosComerciales);
 
+  // Divisiones geográficas en cascada (opción B, utils/divisiones): departamentos del país de las
+  // divisiones (paisDivision: COD_PAIS puede ser un vendedor), municipios del departamento y distritos
+  // del municipio (sin municipio elegido, todos los del departamento).
+  const listaDivision = (campo, valores) => {
+    const pais = datos?.paisDivision;
+    if (campo === 'DIVISION_GEOGRAFICA1') return departamentosDe(catalogos.departamentos, pais);
+    if (campo === 'DIVISION_GEOGRAFICA3') return municipiosDe(catalogos.municipios, pais, valores.DIVISION_GEOGRAFICA1);
+    return distritosDe(catalogos.distritos, pais, valores.DIVISION_GEOGRAFICA1, valores.DIVISION_GEOGRAFICA3);
+  };
+  // Municipio que FR_DISTRITO asigna al distrito elegido (null si no lo tiene).
+  const municipioDe = (valores) =>
+    municipioDeDistrito(catalogos.distritos, datos?.paisDivision, valores.DIVISION_GEOGRAFICA1, valores.DIVISION_GEOGRAFICA2);
+
   // Opciones de un campo 'opciones'. Si el valor del cliente no está en el catálogo se agrega solo
   // con su código para no perderlo.
   const opcionesDe = (campo, valores) => {
-    const lista = catalogos[CAMPOS_CLIENTE[campo].catalogo] ?? [];
+    const def = CAMPOS_CLIENTE[campo];
+    const todas = catalogos[def.catalogo] ?? [];
+    const lista = CAMPOS_DIVISION.includes(campo) ? listaDivision(campo, valores) : todas;
     const actual = valores[campo];
     return actual && !lista.some((o) => o.codigo === actual) ? [{ codigo: actual, descripcion: null }, ...lista] : lista;
   };
@@ -161,13 +180,18 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   // Etiqueta de un campo en pantalla: las divisiones usan las del país (alFAC_PAIS) si las tiene.
   const etiquetaCampo = (campo) => {
     if (campo === 'DIVISION_GEOGRAFICA1' && datos?.etiquetaDivision1) return datos.etiquetaDivision1;
-    if (campo === 'DIVISION_GEOGRAFICA2' && datos?.etiquetaDivision2) return datos.etiquetaDivision2;
     return CAMPOS_CLIENTE[campo].etiqueta;
   };
 
   const empezarEdicion = () => {
     const b = armarBorrador(datos);
-    setBorrador(b);
+    // Cliente sin municipio de la reforma: se propone el de su distrito (se guarda como un cambio más,
+    // y sale en la confirmación).
+    setBorrador(
+      !b.DIVISION_GEOGRAFICA3 && datos.municipioSugerido
+        ? { ...b, DIVISION_GEOGRAFICA3: datos.municipioSugerido.codigo }
+        : b
+    );
     setInicial(b);
     setErrores({});
     setAviso(null);
@@ -179,8 +203,25 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
     setErrores({});
   };
 
+  // Al cambiar un campo se limpian los que dependen de él (departamento -> municipio -> distrito).
+  // Al elegir un distrito, el municipio se llena con el que le asigna FR_DISTRITO (si está vacío o
+  // no coincide).
   const cambiar = (campo, valor) => {
-    setBorrador((b) => ({ ...b, [campo]: valor }));
+    setBorrador((b) => {
+      const nuevo = { ...b, [campo]: valor };
+      let padre = campo;
+      for (;;) {
+        const hijo = Object.keys(CAMPOS_CLIENTE).find((c) => CAMPOS_CLIENTE[c].padre === padre);
+        if (!hijo || b[campo] === valor) break;
+        nuevo[hijo] = null;
+        padre = hijo;
+      }
+      if (campo === 'DIVISION_GEOGRAFICA2') {
+        const municipio = municipioDe(nuevo);
+        if (municipio) nuevo.DIVISION_GEOGRAFICA3 = municipio;
+      }
+      return nuevo;
+    });
     setErrores((e) => (e[campo] ? { ...e, [campo]: undefined } : e));
   };
 
@@ -223,12 +264,18 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   };
 
   const guardar = () => {
-    // Solo se validan y guardan los campos que se tocaron.
+    // Si hay distrito y FR_DISTRITO le asigna municipio, se manda ese municipio.
+    const municipio = municipioDe(borrador);
+    const final = municipio ? { ...borrador, DIVISION_GEOGRAFICA3: municipio } : borrador;
+    // Si cambió cualquiera de los tres niveles, se validan y guardan los tres (CAMPOS_DIVISION).
+    const divisionCambio = CAMPOS_DIVISION.some((c) => esEditable(c) && !iguales(final[c], inicial[c]));
+    const enConjunto = (campo) => divisionCambio && CAMPOS_DIVISION.includes(campo);
+    // El resto: solo se validan y guardan los campos que se tocaron.
     const cambios = [];
     const nuevosErrores = {};
     for (const campo of Object.keys(CAMPOS_CLIENTE)) {
-      if (!esEditable(campo) || iguales(borrador[campo], inicial[campo])) continue;
-      const { valor, error: problema } = validarValor(campo, borrador[campo]);
+      if (!esEditable(campo) || (iguales(final[campo], inicial[campo]) && !enConjunto(campo))) continue;
+      const { valor, error: problema } = validarValor(campo, final[campo]);
       if (problema) {
         nuevosErrores[campo] = problema;
         continue;
@@ -236,7 +283,7 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
       const def = CAMPOS_CLIENTE[campo];
       const crudo = VALOR_CRUDO[campo](datos);
       const anterior = def.tipo === 'texto' ? String(crudo ?? '').trim() : crudo;
-      if (!iguales(anterior, valor)) cambios.push({ campo, valor, anterior });
+      if (!iguales(anterior, valor) || enConjunto(campo)) cambios.push({ campo, valor, anterior });
     }
     if (Object.keys(nuevosErrores).length) {
       setErrores(nuevosErrores);
@@ -247,17 +294,21 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
       setEditando(false);
       return;
     }
-    const lista = cambios
+    // En la confirmación solo se listan los que cambian (los niveles iguales viajan igual, en conjunto).
+    const visibles = cambios.filter(({ valor, anterior }) => !iguales(anterior ?? '', valor ?? ''));
+    const lista = visibles
       .map(({ campo, valor, anterior }) => {
         const def = CAMPOS_CLIENTE[campo];
         const antes = def.catalogo ? opcionesDe(campo, inicial) : [];
-        const ahora = def.catalogo ? opcionesDe(campo, borrador) : [];
+        const ahora = def.catalogo ? opcionesDe(campo, final) : [];
         return `• ${etiquetaCampo(campo)}: ${mostrar(def, anterior, antes)} → ${mostrar(def, valor, ahora)}`;
       })
       .join('\n');
     Alert.alert(
       'Confirmar cambios',
-      `¿Seguro que deseas cambiar ${cambios.length === 1 ? 'este dato' : `estos ${cambios.length} datos`} del cliente?\n\n${lista}`,
+      `¿Seguro que deseas cambiar ${visibles.length === 1 ? 'este dato' : `estos ${visibles.length} datos`} del cliente?\n\n${lista}${
+        divisionCambio ? '\n\nDepartamento, municipio y distrito se envían juntos.' : ''
+      }`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Sí, cambiar', onPress: () => guardarYEnviar(cambios) },
@@ -271,6 +322,8 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
     const def = campo ? CAMPOS_CLIENTE[campo] : null;
     const enEdicion = editando && def && esEditable(campo);
     const pendiente = campo && pendientes.has(campo) && !editando;
+    // Rechazo del servidor del cambio pendiente (se ve también al editar, para corregirlo).
+    const rechazo = campo ? pendientes.get(campo) : null;
     const err = campo ? errores[campo] : null;
     let control;
 
@@ -278,11 +331,20 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
       const opciones = opcionesDe(campo, borrador);
       const actual = opciones.find((o) => o.codigo === borrador[campo]);
       control = (
-        <SelectField
-          value={actual ? etiquetaOpcion(actual) : borrador[campo] ?? SIN_SELECCION}
-          options={opciones.map(etiquetaOpcion)}
-          onChange={(texto) => cambiar(campo, opciones.find((o) => etiquetaOpcion(o) === texto)?.codigo ?? null)}
-        />
+        <>
+          <SelectField
+            value={actual ? etiquetaOpcion(actual) : borrador[campo] ?? SIN_SELECCION}
+            options={opciones.map(etiquetaOpcion)}
+            onChange={(texto) => cambiar(campo, opciones.find((o) => etiquetaOpcion(o) === texto)?.codigo ?? null)}
+          />
+          {!opciones.length ? (
+            <Text style={styles.ayuda}>
+              {def.padre && !borrador[def.padre]
+                ? `Elige primero ${etiquetaCampo(def.padre).toLowerCase()}.`
+                : 'Sin opciones en el equipo. Descarga los catálogos en Datos > Cargar datos.'}
+            </Text>
+          ) : null}
+        </>
       );
     } else if (enEdicion) {
       control = (
@@ -291,6 +353,7 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
           value={borrador[campo] ?? ''}
           onChangeText={(t) => cambiar(campo, t)}
           multiline={Boolean(def.multilinea)}
+          maxLength={def.largo}
           keyboardType={
             def.tipo === 'texto' ? def.teclado ?? 'default' : def.tipo === 'entero' ? 'number-pad' : 'decimal-pad'
           }
@@ -317,6 +380,7 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
         </Text>
         {control}
         {err ? <Text style={styles.error}>{err}</Text> : null}
+        {rechazo && !err ? <Text style={styles.error}>Rechazado por el servidor: {rechazo}</Text> : null}
       </View>
     );
   };
@@ -341,14 +405,15 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
           <>
             {editando && !datos.tieneDatosComerciales ? (
               <Text style={styles.ayuda}>
-                El cliente no tiene datos comerciales en la base local: solo se pueden cambiar nombre, dirección y
-                nivel de precio.
+                El cliente no tiene datos comerciales en la base local: solo se pueden cambiar nombre, alias,
+                dirección y nivel de precio.
               </Text>
             ) : null}
 
             <View style={styles.card}>
               {dato('Código', datos.codigo)}
               {dato('Nombre', datos.nombre, 'NOM_CLT')}
+              {dato('Alias', textoOSin(datos.alias, 'Sin alias'), 'ALIAS')}
               {dato('Dirección', datos.direccion, 'DIR_CLT', { lines: 3 })}
               <View style={styles.row}>
                 {dato(
@@ -377,15 +442,21 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
                 codigoYNombre(datos.division1, datos.nombreDivision1),
                 'DIVISION_GEOGRAFICA1'
               )}
+              {/* Opción B: municipio de la reforma (DIVISION_GEOGRAFICA3) y distrito (DIVISION_GEOGRAFICA2,
+                  el código del ERP). Sin municipio guardado se muestra el que corresponde al distrito. */}
+              {dato(
+                etiquetaCampo('DIVISION_GEOGRAFICA3'),
+                datos.division3
+                  ? codigoYNombre(datos.division3, datos.nombreDivision3)
+                  : datos.municipioSugerido
+                    ? `${codigoYNombre(datos.municipioSugerido.codigo, datos.municipioSugerido.nombre)} (según el distrito)`
+                    : null,
+                'DIVISION_GEOGRAFICA3'
+              )}
               {dato(
                 etiquetaCampo('DIVISION_GEOGRAFICA2'),
                 codigoYNombre(datos.division2, datos.nombreDivision2),
                 'DIVISION_GEOGRAFICA2'
-              )}
-              {dato(
-                etiquetaCampo('DIVISION_GEOGRAFICA3'),
-                codigoYNombre(datos.division3, datos.nombreDivision3),
-                'DIVISION_GEOGRAFICA3'
               )}
             </View>
 
