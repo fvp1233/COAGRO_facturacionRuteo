@@ -3,10 +3,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import OptionTile from '../../components/consulta/OptionTile';
-import { CONSULTAS } from '../../constants/consultas';
+import { CONSULTAS_TAB as CONSULTAS } from '../../constants/consultas';
 import { colors, radius, spacing } from '../../theme';
 
-const COLUMNS = 3;
+const COLUMNS = 2;
 const ACCENT = colors.primary;
 
 export default function ConsultaView({ onBack, onOpenConsulta }) {

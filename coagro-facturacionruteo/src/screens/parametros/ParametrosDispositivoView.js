@@ -8,6 +8,8 @@ import SelectField from '../../components/ui/SelectField';
 import FirmaEquipo from '../../components/ui/FirmaEquipo';
 import { readConfig } from '../../services/localConfig';
 import { getRutaActiva, getRutasHandheld, setRutaActiva } from '../../repositories/rutaActiva';
+import { getFleteRuta } from '../../repositories/flete';
+import { formatMonto, formatPorcentaje } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 import appConfig from '../../../app.json';
 
@@ -17,6 +19,7 @@ const formatHora = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 // Parámetros del dispositivo: ruta, fecha/hora del momento en que se abrió la pantalla, teléfono,
 // operador y versión de la app. Teléfono y operador aún no tienen endpoint en el servidor.
+// Flete: configuración de la ruta elegida (RUTA_CONSECUT_RT; llega en Datos > Cargar datos).
 export default function ParametrosDispositivoView({ onBack }) {
   const insets = useSafeAreaInsets();
   const [rutas, setRutas] = useState([]);
@@ -26,6 +29,23 @@ export default function ParametrosDispositivoView({ onBack }) {
   // Se fija al abrir; no se actualiza mientras la pantalla está abierta.
   const [abierto] = useState(() => new Date());
   const [handheld, setHandheld] = useState(null);
+  // Configuración del flete de la ruta elegida (getFleteRuta); null mientras carga.
+  const [flete, setFlete] = useState(null);
+
+  const rutaCodigo = rutas.find((r) => r.label === rutaLabel)?.codigo ?? null;
+  useEffect(() => {
+    let cancelado = false;
+    setFlete(null);
+    if (!rutaCodigo) return undefined;
+    getFleteRuta(rutaCodigo)
+      .then((f) => {
+        if (!cancelado) setFlete(f);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [rutaCodigo]);
 
   // Handheld configurada en este equipo (JSON de la pantalla de Conexión).
   useEffect(() => {
@@ -90,6 +110,8 @@ export default function ParametrosDispositivoView({ onBack }) {
           <Text style={styles.warning}>No hay rutas en el equipo. Descarga los datos en Datos &gt; Cargar datos.</Text>
         ) : null}
 
+        {rutaCodigo && flete ? <FleteCard flete={flete} /> : null}
+
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Dispositivo</Text>
           <View style={styles.row}>
@@ -108,6 +130,47 @@ export default function ParametrosDispositivoView({ onBack }) {
           </Text>
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+// Flete de la ruta: si se cobra, desde qué total ya no, cuánto es (sin IVA y con IVA) y el artículo.
+function FleteCard({ flete }) {
+  const ivaFlete = (flete.monto * flete.impuesto1) / 100;
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Flete</Text>
+      <View style={styles.row}>
+        <Field label="Cobra flete" value={flete.usaFlete ? 'Sí' : 'No'} style={styles.half} />
+        <Field
+          label="Mínimo (con IVA)"
+          value={flete.usaFlete ? formatMonto(flete.minimo) : null}
+          style={styles.half}
+        />
+      </View>
+      {flete.usaFlete ? (
+        <>
+          <View style={styles.row}>
+            <Field label="Monto (sin IVA)" value={formatMonto(flete.monto)} style={styles.half} />
+            <Field
+              label={`Monto con IVA (${formatPorcentaje(flete.impuesto1)})`}
+              value={formatMonto(flete.monto + ivaFlete)}
+              style={styles.half}
+            />
+          </View>
+          <Field label="Artículo" value={`${flete.articulo} · ${flete.descripcion}`} />
+          <Text style={styles.hint}>
+            {`Pedidos y cotizaciones por debajo de ${formatMonto(flete.minimo)} (con IVA) llevan el flete como una línea más.`}
+          </Text>
+          {!flete.articuloEnEquipo ? (
+            <Text style={styles.warning}>
+              El artículo de flete {flete.articulo} no está en el equipo. Descarga los datos en Datos &gt; Cargar datos.
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <Text style={styles.hint}>Esta ruta no cobra flete.</Text>
+      )}
     </View>
   );
 }

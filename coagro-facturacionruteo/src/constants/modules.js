@@ -1,20 +1,17 @@
 import { colors } from '../theme';
 
-// Módulos del menú principal. Los badges son datos de ejemplo hasta conectar el backend.
+// Módulos del menú principal.
 export const MODULES = [
   {
     id: 'clientes',
     title: 'Clientes',
     subtitle: 'Directorio y créditos',
     icon: { family: 'Feather', name: 'users' },
-    badge: { label: '42' },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: colors.primarySoft,
-      badgeText: colors.primaryDark,
     },
   },
   {
@@ -22,14 +19,11 @@ export const MODULES = [
     title: 'Metas',
     subtitle: 'Cómo voy con mis metas de venta',
     icon: { family: 'MaterialCommunityIcons', name: 'bullseye-arrow' },
-    badge: { label: 'Activo', dot: true },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: colors.primarySoft,
-      badgeText: colors.primaryDark,
     },
   },
   {
@@ -37,14 +31,11 @@ export const MODULES = [
     title: 'Reportes',
     subtitle: 'Ventas y liquidación',
     icon: { family: 'Feather', name: 'trending-up' },
-    badge: { label: '$4,850' },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: colors.primarySoft,
-      badgeText: colors.primaryDark,
     },
   },
   {
@@ -52,14 +43,11 @@ export const MODULES = [
     title: 'Datos',
     subtitle: 'Catálogo y precios',
     icon: { family: 'Feather', name: 'database' },
-    badge: { icon: 'refresh-cw' },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: 'transparent',
-      badgeText: colors.primaryDark,
     },
   },
   {
@@ -67,14 +55,11 @@ export const MODULES = [
     title: 'Parámetros',
     subtitle: 'Impresora y sistema',
     icon: { family: 'Feather', name: 'sliders' },
-    badge: { label: 'Config' },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: colors.primarySoft,
-      badgeText: colors.primaryDark,
     },
   },
   {
@@ -82,14 +67,11 @@ export const MODULES = [
     title: 'Calendario',
     subtitle: 'Vencimientos de documentos',
     icon: { family: 'MaterialCommunityIcons', name: 'calendar-month-outline' },
-    badge: { label: '5 hoy' },
     palette: {
       accent: colors.primary,
       gradient: [colors.primary, colors.primaryPressed],
       tint: colors.surface,
       border: colors.border,
-      badgeBg: colors.primarySoft,
-      badgeText: colors.primaryDark,
     },
   },
 ];

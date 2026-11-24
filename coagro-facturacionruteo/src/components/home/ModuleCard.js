@@ -5,7 +5,7 @@ import { colors, radius, spacing } from '../../theme';
 
 const ICON_FAMILIES = { Feather, MaterialCommunityIcons };
 
-export default function ModuleCard({ title, subtitle, icon, badge, palette, onPress, style }) {
+export default function ModuleCard({ title, subtitle, icon, palette, onPress, style }) {
   const Icon = ICON_FAMILIES[icon.family];
 
   return (
@@ -20,11 +20,7 @@ export default function ModuleCard({ title, subtitle, icon, badge, palette, onPr
         style={[styles.card, { borderColor: palette.border }]}
       >
         <View style={styles.topRow}>
-          <View style={[styles.dot, { backgroundColor: palette.accent }]} />
-          <View style={styles.topRight}>
-            {badge ? <Badge badge={badge} palette={palette} /> : null}
-            <Feather name="arrow-right" size={16} color={palette.accent} />
-          </View>
+          <Feather name="arrow-right" size={16} color={palette.accent} />
         </View>
 
         <View style={styles.center}>
@@ -47,19 +43,6 @@ export default function ModuleCard({ title, subtitle, icon, badge, palette, onPr
   );
 }
 
-function Badge({ badge, palette }) {
-  if (badge.icon) {
-    return <Feather name={badge.icon} size={13} color={palette.badgeText} />;
-  }
-
-  return (
-    <View style={[styles.badge, { backgroundColor: palette.badgeBg }]}>
-      {badge.dot ? <View style={[styles.badgeDot, { backgroundColor: palette.badgeText }]} /> : null}
-      <Text style={[styles.badgeText, { color: palette.badgeText }]}>{badge.label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   pressable: {
     borderRadius: radius.lg,
@@ -68,50 +51,23 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     transform: [{ scale: 0.98 }],
   },
+  // El ícono y los textos van centrados en la card; la flecha flota en la esquina sin empujarlos.
   card: {
     flex: 1,
     borderRadius: radius.lg,
     borderWidth: 1,
     padding: spacing.md,
+    justifyContent: 'center',
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 22,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-  },
-  topRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    gap: 4,
-  },
-  badgeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: radius.pill,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
   },
   center: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm + 4,
   },
   iconTile: {
     width: 64,

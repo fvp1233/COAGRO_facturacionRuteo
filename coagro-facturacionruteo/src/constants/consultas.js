@@ -28,7 +28,7 @@ export const CONSULTAS = [
   },
   {
     id: 'notas-credito',
-    title: 'Notas Créd.',
+    title: 'Notas de crédito',
     icon: 'invoice',
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
@@ -38,22 +38,7 @@ export const CONSULTAS = [
     icon: 'cart-plus',
     palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
   },
-  {
-    id: 'pedidos-estado',
-    title: 'Ped. Estado',
-    icon: 'autorenew',
-    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
-  },
-  {
-    id: 'devolucion',
-    title: 'Devolución',
-    icon: 'clipboard-arrow-left',
-    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
-  },
-  {
-    id: 'articulos',
-    title: 'Artículos',
-    icon: 'tag',
-    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
-  },
 ];
+
+// Pestaña inferior Consulta: Pedidos muestra los pedidos y las cotizaciones del cliente en el equipo.
+export const CONSULTAS_TAB = CONSULTAS.map((c) => (c.id === 'pedidos' ? { ...c, title: 'Pedidos y cotizaciones' } : c));

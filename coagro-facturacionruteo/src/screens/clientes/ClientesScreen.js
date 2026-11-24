@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import BottomTabBar from '../../components/ui/BottomTabBar';
-import CenteredHeader from '../../components/ui/CenteredHeader';
 import ValidarView from './ValidarView';
 import ConsultaView from './ConsultaView';
-import SincronizarView from './SincronizarView';
 import ClienteOpcionesView from './ClienteOpcionesView';
 import VisitaRegistroView from './VisitaRegistroView';
 import CobrosView from './CobrosView';
@@ -16,6 +14,7 @@ import PagoView from './PagoView';
 import ReciboView from './ReciboView';
 import ConsultaCobrosView from './ConsultaCobrosView';
 import ConsultaPedidosView from './ConsultaPedidosView';
+import ConsultaPedidosCotizacionesView from './ConsultaPedidosCotizacionesView';
 import ConsultaFacturasView from './ConsultaFacturasView';
 import ConsultaClienteView from './ConsultaClienteView';
 import PedidoView from './PedidoView';
@@ -23,6 +22,7 @@ import PedidoArticulosView from './PedidoArticulosView';
 import CotizacionesView from './CotizacionesView';
 import DescuentosView from './DescuentosView';
 import PromocionalesView from './PromocionalesView';
+import AnularDocumentoView from './AnularDocumentoView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
@@ -41,9 +41,7 @@ const TABS = [
     icon: { family: 'MaterialCommunityIcons', name: 'clipboard-check-outline' },
     activeIcon: { family: 'Feather', name: 'check' },
   },
-  { key: 'despacho', label: 'Despacho', icon: { family: 'Feather', name: 'truck' } },
   { key: 'consulta', label: 'Consulta', icon: { family: 'Feather', name: 'search' } },
-  { key: 'sincronizar', label: 'Sincronizar', icon: { family: 'MaterialCommunityIcons', name: 'sync' } },
 ];
 
 // Contenedor del módulo Clientes: el menú inferior cambia la vista activa.
@@ -129,7 +127,7 @@ export default function ClientesScreen({ onBack }) {
           <ConsultaView
             onBack={() => setActiveTab('validar')}
             onOpenConsulta={(opcion) => {
-              if (opcion.id !== 'cliente' && opcion.id !== 'cobros') {
+              if (!['cliente', 'cobros', 'documentos', 'pedidos'].includes(opcion.id)) {
                 Alert.alert(opcion.title, 'Próximamente.');
               } else if (!seleccion) {
                 Alert.alert(opcion.title, 'Selecciona un cliente de la tabla primero.');
@@ -139,24 +137,8 @@ export default function ClientesScreen({ onBack }) {
             }}
           />
         );
-      case 'sincronizar':
-        return (
-          <SincronizarView
-            onBack={() => setActiveTab('validar')}
-            onSynced={() => setRefreshKey((k) => k + 1)}
-          />
-        );
-      default: {
-        const tab = TABS.find((t) => t.key === activeTab);
-        return (
-          <View style={styles.placeholder}>
-            <CenteredHeader title={tab.label} onBack={() => setActiveTab('validar')} />
-            <View style={styles.placeholderBody}>
-              <Text style={styles.placeholderText}>Interfaz en construcción</Text>
-            </View>
-          </View>
-        );
-      }
+      default:
+        return null;
     }
   };
 
@@ -399,6 +381,13 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  // Menú Anular: pedidos y cotizaciones del día en pestañas.
+  if (validando && opcionActiva === 'anular') {
+    return (
+      <AnularDocumentoView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setOpcionActiva(null)} />
+    );
+  }
+
   if (validando && opcionActiva === 'descuentos') {
     return (
       <DescuentosView
@@ -430,6 +419,29 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  // Consulta > Documentos: documentos vencidos del cliente seleccionado (sin registrar visita).
+  if (!validando && activeTab === 'consulta' && consultaTab === 'documentos' && seleccion) {
+    return (
+      <ConsultaCobrosView
+        cliente={seleccion.cliente}
+        ruta={seleccion.ruta}
+        soloVencidos
+        onBack={() => setConsultaTab(null)}
+      />
+    );
+  }
+
+  // Consulta > Pedidos y cotizaciones: los del cliente que están en el equipo (sin registrar visita).
+  if (!validando && activeTab === 'consulta' && consultaTab === 'pedidos' && seleccion) {
+    return (
+      <ConsultaPedidosCotizacionesView
+        cliente={seleccion.cliente}
+        ruta={seleccion.ruta}
+        onBack={() => setConsultaTab(null)}
+      />
+    );
+  }
+
   if (validando && opcionActiva === 'consultar' && consulta === 'pedidos') {
     return (
       <ConsultaPedidosView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
@@ -457,7 +469,7 @@ export default function ClientesScreen({ onBack }) {
       <ClienteOpcionesView
         title="Menú Consultar"
         opciones={CONSULTAS}
-        columns={3}
+        columns={2}
         cliente={validando.cliente}
         ruta={validando.ruta}
         onBack={() => setOpcionActiva(null)}
@@ -476,7 +488,17 @@ export default function ClientesScreen({ onBack }) {
         ruta={validando.ruta}
         onBack={handleSalirValidar}
         onOpcion={(opcion) => {
-          if (['cobros', 'pedido', 'cotizacion', 'descuentos', 'promocionales', 'consultar'].includes(opcion.id)) {
+          if (
+            [
+              'cobros',
+              'pedido',
+              'cotizacion',
+              'descuentos',
+              'promocionales',
+              'anular',
+              'consultar',
+            ].includes(opcion.id)
+          ) {
             setNuevaCotizacion(false);
             setAtajoDescuento(null);
             setTabDescuentos('descuentos');
@@ -501,17 +523,5 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.surface,
-  },
-  placeholder: {
-    flex: 1,
-  },
-  placeholderBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    fontSize: 13,
-    color: colors.textMuted,
   },
 });

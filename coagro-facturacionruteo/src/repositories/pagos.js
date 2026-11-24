@@ -359,3 +359,85 @@ export async function getRecibo(idPago) {
     })),
   };
 }
+
+// Cierre de cobro del día (Reportes > Cierre de Cobro): recibos registrados hoy en el equipo con sus
+// formas de pago (detalle de cheques y transferencias / depósitos) y la cuenta de banco del recibo.
+// Más reciente primero.
+// [{ id, recibo, fecha, cliente, nombreCliente, ruta, documento, monto, cancelado, enviado, aplicado,
+//    banco, cuenta, nombreCuenta, formas: [{ forma, monto, numeroCheque, cuenta, banco, fecha, transaccion }] }]
+export async function getCierreCobroDia() {
+  const db = await getDatabase();
+  const pagos = await db.getAllAsync(
+    `SELECT p.ID, ${SQL_NUM_REC} AS NUM_REC, ${SQL_DOC_PRO} AS DOC_PRO, p.FECHA, p.COD_CLT, p.COD_ZON, p.NUM_DOC,
+            p.MONTO, p.SALDO_NUEVO, p.ENVIADO, c.NOM_CLT, d1.DEP_BCO, d1.DEP_CTA, b.NOM_CTA
+       FROM COBRO_PAGO p
+       LEFT JOIN (SELECT TRIM(COD_CLT) AS COD_CLT, MIN(NOM_CLT) AS NOM_CLT FROM CLIENTE GROUP BY TRIM(COD_CLT)) c
+              ON c.COD_CLT = TRIM(p.COD_CLT)
+       -- Cuenta del recibo: la guarda cada forma de pago (DEP_BCO + DEP_CTA); se toma la primera que la tenga.
+       LEFT JOIN (SELECT ID_PAGO, MIN(LINEA) AS LINEA FROM COBRO_PAGO_DET WHERE DEP_CTA IS NOT NULL GROUP BY ID_PAGO) l
+              ON l.ID_PAGO = p.ID
+       LEFT JOIN COBRO_PAGO_DET d1 ON d1.ID_PAGO = l.ID_PAGO AND d1.LINEA = l.LINEA
+       LEFT JOIN (SELECT COD_BCO, CTA_BCO, MIN(NOM_CTA) AS NOM_CTA FROM alCXC_CTA_BCO GROUP BY COD_BCO, CTA_BCO) b
+              ON b.COD_BCO = d1.DEP_BCO AND b.CTA_BCO = d1.DEP_CTA
+      WHERE date(p.FECHA) = date('now', 'localtime')
+      ORDER BY p.FECHA DESC, p.ID DESC`
+  );
+  if (!pagos.length) return [];
+
+  const detalle = await db.getAllAsync(
+    `SELECT ID_PAGO, FORMA, MONTO, NUM_CHEQUE, NUM_CUENTA, BANCO_CHEQUE, FECHA_CHEQUE, NUM_TRANSACCION
+       FROM COBRO_PAGO_DET
+      WHERE ID_PAGO IN (${pagos.map(() => '?').join(',')})
+      ORDER BY ID_PAGO, LINEA`,
+    pagos.map((p) => p.ID)
+  );
+
+  return pagos.map((p) => ({
+    id: p.ID,
+    recibo: p.NUM_REC,
+    fecha: p.FECHA,
+    cliente: p.COD_CLT,
+    nombreCliente: p.NOM_CLT ?? p.COD_CLT,
+    ruta: p.COD_ZON,
+    documento: p.NUM_DOC,
+    monto: Number(p.MONTO ?? 0),
+    cancelado: p.SALDO_NUEVO != null && p.SALDO_NUEVO <= 0.005,
+    enviado: p.ENVIADO === 1,
+    aplicado: p.DOC_PRO === 'S',
+    banco: p.DEP_BCO ?? '',
+    cuenta: p.DEP_CTA ?? '',
+    nombreCuenta: p.NOM_CTA ?? '',
+    formas: detalle
+      .filter((d) => d.ID_PAGO === p.ID)
+      .map((d) => ({
+        forma: d.FORMA,
+        monto: Number(d.MONTO ?? 0),
+        numeroCheque: d.NUM_CHEQUE,
+        cuenta: d.NUM_CUENTA,
+        banco: d.BANCO_CHEQUE,
+        fecha: d.FECHA_CHEQUE,
+        transaccion: d.NUM_TRANSACCION,
+      })),
+  }));
+}
+
+// Abonos de todos los documentos del equipo, agrupados por documento (para reportes de toda la ruta).
+// Devuelve Map clave 'ruta|cliente|codTipo|documento' → [{ moneda, monto, aplicado, hoy }].
+// hoy = el abono se registró hoy.
+export async function getAbonosEquipo() {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT p.COD_ZON, p.COD_CLT, p.COD_TIP_DC, p.NUM_DOC, p.MONEDA, p.MONTO, ${SQL_DOC_PRO} AS DOC_PRO,
+            date(p.FECHA) = date('now', 'localtime') AS HOY
+       FROM COBRO_PAGO p
+      ORDER BY p.ID`
+  );
+  const abonos = new Map();
+  for (const r of rows) {
+    const clave = `${r.COD_ZON}|${r.COD_CLT}|${r.COD_TIP_DC}|${r.NUM_DOC}`;
+    const lista = abonos.get(clave) ?? [];
+    lista.push({ moneda: r.MONEDA, monto: Number(r.MONTO ?? 0), aplicado: r.DOC_PRO === 'S', hoy: r.HOY === 1 });
+    abonos.set(clave, lista);
+  }
+  return abonos;
+}

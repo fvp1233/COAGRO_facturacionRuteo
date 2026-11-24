@@ -748,4 +748,16 @@ export const migrations = [
       );
     `);
   },
+
+  // v35: flete por ruta. Llegan en cada fila de GET /fr/sync/consecutivos: USA_FLETE ('S'/'N'),
+  // MINIMO_FLETE (total con IVA desde el que ya no se cobra), MONTO_FLETE (sin IVA) y ARTICULO_FLETE
+  // (código del artículo que se agrega como línea, ej. '103'). null hasta la próxima carga = sin flete.
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE RUTA_CONSECUT_RT ADD COLUMN USA_FLETE TEXT;
+      ALTER TABLE RUTA_CONSECUT_RT ADD COLUMN MINIMO_FLETE REAL;
+      ALTER TABLE RUTA_CONSECUT_RT ADD COLUMN MONTO_FLETE REAL;
+      ALTER TABLE RUTA_CONSECUT_RT ADD COLUMN ARTICULO_FLETE TEXT;
+    `);
+  },
 ];

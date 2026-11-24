@@ -10,13 +10,6 @@ export const PARAMETROS = [
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
-    id: 'consulta-ncf',
-    title: 'NCF / eCF',
-    subtitle: 'Consulta',
-    icon: 'file-search-outline',
-    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
-  },
-  {
     id: 'dispositivo',
     title: 'Dispositivo',
     subtitle: 'Corporación',
@@ -24,10 +17,17 @@ export const PARAMETROS = [
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
-    id: 'impresion',
-    title: 'Impresión',
-    subtitle: 'Parámetros de impresora',
-    icon: 'printer-settings',
-    palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
+    id: 'manual',
+    title: 'Manual de usuario',
+    subtitle: 'Guía de uso',
+    icon: 'book-open-variant',
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
+  },
+  {
+    id: 'consultas',
+    title: 'Consultas',
+    subtitle: 'Dudas y soporte',
+    icon: 'help-circle-outline',
+    palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
 ];

@@ -1,5 +1,5 @@
 import { getDatabase } from '../db/database';
-import { getAbonosCliente } from './pagos';
+import { getAbonosCliente, getAbonosEquipo } from './pagos';
 
 const EPS = 0.005;
 
@@ -110,4 +110,49 @@ export async function getVencimientos({ soloAgente = false } = {}) {
     saldoDolar: r.SALDO_DOLAR,
     vence: String(r.FEC_VEN ?? '').slice(0, 10),
   }));
+}
+
+// Lo que faltó cobrar hoy (Reportes > Cierre de Cobro): documentos con saldo pendiente (descontados
+// los abonos del equipo que control aún no aplica) que vencen hoy o ya vencieron y que no recibieron
+// ningún abono hoy. Los más atrasados primero.
+// [{ clave, tipo, documento, cliente, nombre, ruta, moneda, saldo, vence, dias }] — dias: días de
+// atraso (0 = vence hoy). saldo en la moneda del documento.
+export async function getNoCobradosHoy() {
+  const abonos = await getAbonosEquipo();
+  const db = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT p.COD_TIP_DC, p.CLASE_DOCUMENTO, p.NUM_DOC, p.COD_CLT, p.COD_ZON, p.IND_MON, p.SALDO_LOCAL,
+            p.SALDO_DOLAR, p.TIP_CMB_DOL, p.FEC_VEN, c.NOM_CLT,
+            CAST(julianday(date('now', 'localtime')) - julianday(date(p.FEC_VEN)) AS INTEGER) AS DIAS
+       FROM alCXC_PEN_COB p
+       LEFT JOIN (SELECT TRIM(COD_CLT) AS COD_CLT, MIN(NOM_CLT) AS NOM_CLT FROM CLIENTE GROUP BY TRIM(COD_CLT)) c
+              ON c.COD_CLT = TRIM(p.COD_CLT)
+      WHERE p.FEC_VEN IS NOT NULL AND date(p.FEC_VEN) <= date('now', 'localtime')
+      ORDER BY date(p.FEC_VEN), c.NOM_CLT, p.NUM_DOC`
+  );
+
+  const resultado = [];
+  for (const r of rows) {
+    const lista = abonos.get(`${r.COD_ZON}|${r.COD_CLT}|${r.COD_TIP_DC}|${r.NUM_DOC}`);
+    if (lista?.some((a) => a.hoy)) continue; // se cobró (o abonó) hoy
+    const d = conAbonos(
+      { moneda: r.IND_MON ?? '', saldoDocLocal: r.SALDO_LOCAL, saldoDocDolar: r.SALDO_DOLAR, tipoCambio: r.TIP_CMB_DOL },
+      lista
+    );
+    const saldo = String(d.moneda).toUpperCase().startsWith('D') ? d.saldoDocDolar : d.saldoDocLocal;
+    if (saldo <= EPS) continue;
+    resultado.push({
+      clave: `${r.COD_TIP_DC}|${r.COD_ZON}|${r.NUM_DOC}|${r.COD_CLT}`,
+      tipo: r.CLASE_DOCUMENTO ?? '',
+      documento: r.NUM_DOC,
+      cliente: r.COD_CLT,
+      nombre: r.NOM_CLT ?? r.COD_CLT,
+      ruta: r.COD_ZON,
+      moneda: d.moneda,
+      saldo,
+      vence: String(r.FEC_VEN ?? '').slice(0, 10),
+      dias: Math.max(0, Number(r.DIAS ?? 0)),
+    });
+  }
+  return resultado;
 }

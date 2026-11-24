@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -119,7 +119,6 @@ export default function MiDiaReporteView({ onBack }) {
   const insets = useSafeAreaInsets();
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState('');
   const [filtro, setFiltro] = useState(FILTROS.todo);
   const [verPendientes, setVerPendientes] = useState(false);
@@ -150,21 +149,23 @@ export default function MiDiaReporteView({ onBack }) {
     }
   };
 
-  const cargar = useCallback(async () => {
-    try {
-      setDatos(await getResumenDia());
-      setError('');
-    } catch (e) {
-      setError(e?.message || 'No se pudo leer la actividad del día.');
-    } finally {
-      setCargando(false);
-      setRefrescando(false);
-    }
-  }, []);
-
+  // Todo sale de la base local: se lee una vez al abrir la pantalla.
   useEffect(() => {
-    cargar();
-  }, [cargar]);
+    let cancelado = false;
+    getResumenDia()
+      .then((d) => {
+        if (!cancelado) setDatos(d);
+      })
+      .catch((e) => {
+        if (!cancelado) setError(e?.message || 'No se pudo leer la actividad del día.');
+      })
+      .finally(() => {
+        if (!cancelado) setCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   const resumen = useMemo(() => {
     if (!datos) return null;
@@ -209,28 +210,13 @@ export default function MiDiaReporteView({ onBack }) {
       <StatusBar style="dark" />
       <CenteredHeader title="Mi día" onBack={onBack} />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refrescando}
-            onRefresh={() => {
-              setRefrescando(true);
-              cargar();
-            }}
-            colors={[colors.primary]}
-          />
-        }
-      >
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.dia}>
           <MaterialCommunityIcons name="calendar-today" size={22} color={colors.primary} />
           <View style={styles.flex}>
             <Text style={styles.diaTitulo}>¿Cómo voy hoy?</Text>
             <Text style={styles.diaFecha}>{hoyLargo()}</Text>
           </View>
-          <Pressable onPress={cargar} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
-            <Feather name="refresh-cw" size={18} color={colors.textMuted} />
-          </Pressable>
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

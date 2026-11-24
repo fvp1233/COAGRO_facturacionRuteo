@@ -152,6 +152,7 @@ export default function DatosScreen({ module, onBack }) {
         lotes: await descargarLotes(),
         cobros: await descargarCobros(),
         cobrosAgente: await descargarCobrosAgente(),
+        // Después de articulos: guarda en ARTICULO los artículos de flete (articulos borra la tabla).
         consecutivos: await descargarConsecutivos(),
         cotizaciones: await descargarCotizaciones(),
         historialPedidos: await descargarHistorialPedidosRuta(),

@@ -27,9 +27,9 @@ export const OPCIONES_CLIENTE = [
     palette: { accent: colors.primary, iconColor: colors.primary, tint: colors.surface, border: colors.border },
   },
   {
-    id: 'devolucion',
-    title: 'Devolución',
-    icon: 'clipboard-arrow-left',
+    id: 'notaCredito',
+    title: 'Notas de crédito',
+    icon: 'invoice',
     palette: { accent: colors.primary, tint: colors.surface, border: colors.border },
   },
   {

@@ -8,6 +8,8 @@ import CenteredHeader from '../components/ui/CenteredHeader';
 import OptionTile from '../components/consulta/OptionTile';
 import InventarioReporteView from './reportes/InventarioReporteView';
 import MiDiaReporteView from './reportes/MiDiaReporteView';
+import CobradoVendidoReporteView from './reportes/CobradoVendidoReporteView';
+import CierreCobroReporteView from './reportes/CierreCobroReporteView';
 import { REPORTES } from '../constants/reportes';
 import { colors, radius, spacing } from '../theme';
 
@@ -20,6 +22,8 @@ function formatHoy() {
 
 // Reportes que ya tienen pantalla propia.
 const VISTAS = {
+  'monto-cobrado-vendido': CobradoVendidoReporteView,
+  'cierre-cobro': CierreCobroReporteView,
   inventario: InventarioReporteView,
   visitas: MiDiaReporteView,
 };

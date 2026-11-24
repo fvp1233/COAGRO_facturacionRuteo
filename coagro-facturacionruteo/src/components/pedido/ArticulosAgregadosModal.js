@@ -28,21 +28,29 @@ function LineaCard({ linea, formatMonto, onEliminar }) {
             <Text style={styles.total}>{formatMonto(linea.total, linea.moneda)}</Text>
           </Text>
         </View>
+        {linea.esFlete ? <Text style={styles.fleteNota}>Flete: no llega al mínimo de compra</Text> : null}
         {linea.porcDescuento ? (
           <Text style={styles.descuento}>
             Desc. {formatPorcentaje(linea.porcDescuento)} · -{formatMonto(linea.descuento, linea.moneda)}
           </Text>
         ) : null}
       </View>
-      {/* Columna derecha solo con el botón de eliminar, centrado. */}
+      {/* Columna derecha solo con el botón de eliminar, centrado. La línea del flete no se borra:
+          la app la quita sola cuando el documento llega al mínimo. */}
       <View style={styles.cardDerecha}>
-        <Pressable
-          onPress={() => onEliminar(linea.codigo)}
-          hitSlop={10}
-          style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
-        >
-          <Feather name="trash-2" size={18} color={colors.error} />
-        </Pressable>
+        {linea.esFlete ? (
+          <View style={[styles.delete, styles.flete]}>
+            <Feather name="truck" size={18} color={colors.textMuted} />
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => onEliminar(linea.codigo)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
+          >
+            <Feather name="trash-2" size={18} color={colors.error} />
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -50,7 +58,7 @@ function LineaCard({ linea, formatMonto, onEliminar }) {
 
 // Pantalla con los artículos agregados al pedido (lupa en Artículos del pedido), en cards paginadas.
 // lineas: [{ codigo, descripcion, cantidadTexto (ej. "1 BARRIL + 100 LT"), precio, porcDescuento,
-// descuento, total, moneda }]. formatMonto(n, moneda) da el texto del monto.
+// descuento, total, moneda, esFlete? }]. formatMonto(n, moneda) da el texto del monto.
 // onEliminar(codigo) quita la línea; total = suma de las líneas. tipo: TIPOS_PEDIDO (textos).
 export default function ArticulosAgregadosModal({
   visible,
@@ -167,6 +175,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressed: { opacity: 0.7 },
+  flete: { backgroundColor: colors.surface },
+  fleteNota: { fontSize: 12, color: colors.textMuted },
   total: { fontSize: 15, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
   empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },

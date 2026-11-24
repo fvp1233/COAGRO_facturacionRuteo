@@ -1,6 +1,6 @@
 import { getDatabase } from '../db/database';
 import { toSqlLocal } from './visitas';
-import { ACTIVIDAD, anotarActividad } from './actividad';
+import { ACTIVIDAD, anotarActividad, diaISO, quitarActividad } from './actividad';
 
 // Tipo de documento de los subtipos que se ofrecen en el pedido (SUBTIPO_DOC.TIPO).
 const TIPO_FACTURA = 'FAC';
@@ -370,6 +370,33 @@ export async function getCotizacionesCliente(cliente, ruta) {
   }));
 }
 
+// Pedidos (tipoDoc 'F') o cotizaciones ('C') del cliente en la ruta que están en el equipo, los más
+// recientes primero. Pedidos: los capturados aquí (y las cotizaciones aprobadas) desde el último
+// "Cargar datos", que borra los ya enviados. Cotizaciones: además, las descargadas del servidor.
+// enviado: true = ya está en el servidor.
+export async function getDocumentosEquipoCliente(cliente, ruta, tipoDoc = 'F') {
+  const db = await getDatabase();
+  const filas = await db.getAllAsync(
+    `SELECT COD_CIA, NUM_PED, FEC_PED, FEC_DES, HOR_FIN, NUM_ITM, MON_CIV, MONEDA, ENVIADO, ERROR_ENVIO
+       FROM alFAC_ENC_PED
+      WHERE COD_CLT = ? AND COD_ZON = ? AND TIP_DOC = ?
+      ORDER BY FEC_PED DESC, HOR_FIN DESC, NUM_PED DESC`,
+    [cliente, ruta, tipoDoc]
+  );
+  return filas.map((r) => ({
+    compania: r.COD_CIA,
+    numero: r.NUM_PED,
+    fecha: r.FEC_PED,
+    entrega: r.FEC_DES,
+    hora: r.HOR_FIN,
+    articulos: r.NUM_ITM ?? 0,
+    total: r.MON_CIV ?? 0,
+    moneda: r.MONEDA,
+    enviado: r.ENVIADO === 1,
+    errorEnvio: r.ERROR_ENVIO ?? null,
+  }));
+}
+
 // Todo lo que lleva el PDF del pedido / cotización, leído de la base local (mismos datos que arma el
 // backend en controllers/fr/cotizacionPdf.js). null si el documento ya no está en el equipo (se borra
 // en Cargar datos una vez enviado). ruta: COD_ZON. numero: NUM_PED.
@@ -475,4 +502,130 @@ export async function aprobarCotizacion({ ruta, numero, entrega, fecha }) {
       monto: enc.MON_CIV,
     });
   });
+}
+
+// Anulación de pedidos y cotizaciones del día (Validar cliente > Anular pedido / Anular cotización).
+// Cada tipo usa su propio consecutivo de RUTA_CONSECUT_RT (PEDIDO o FACTURA, igual que guardarPedido).
+const ANULACION = {
+  F: {
+    columna: 'PEDIDO',
+    actividad: ACTIVIDAD.pedido,
+    doc: TIPOS_PEDIDO.pedido,
+    ultimo: 'Solo se puede anular el último pedido',
+    notasVisita: 'Pedido anulado',
+  },
+  C: {
+    columna: 'FACTURA',
+    actividad: ACTIVIDAD.cotizacion,
+    doc: TIPOS_PEDIDO.cotizacion,
+    ultimo: 'Solo se puede anular la última cotización',
+    notasVisita: 'Cotización anulada',
+  },
+};
+
+const anulacionDe = (tipoDoc) => {
+  const a = ANULACION[tipoDoc];
+  if (!a) throw new Error(`Tipo de documento desconocido: ${tipoDoc}.`);
+  return a;
+};
+
+// Motivo por el que un documento del día no se puede anular (null = se puede). El consecutivo de la
+// ruta solo se puede regresar uno sin repetir números si el documento es el último que lo usó:
+// su número + 1 = consecutivo actual. Por eso se anulan del más reciente hacia atrás.
+function motivoNoAnulable(r, actual, a) {
+  if (r.ENVIADO === 1) return 'Ya se envió al servidor';
+  if (r.APROBADA) return 'Viene de una cotización aprobada';
+  let siguiente = null;
+  try {
+    siguiente = siguienteConsecutivo(r.NUM_PED);
+  } catch {
+    // número sin parte numérica: no se puede regresar el consecutivo
+  }
+  if (!actual || siguiente !== actual) return a.ultimo;
+  return null;
+}
+
+const consecutivoActual = async (db, ruta, a) =>
+  String((await db.getFirstAsync(`SELECT ${a.columna} AS ACTUAL FROM RUTA_CONSECUT_RT WHERE RUTA = ?`, [ruta]))?.ACTUAL ?? '').trim();
+
+// Documentos del tipo (TIP_DOC 'F' pedido | 'C' cotización) que están en el equipo con fecha de hoy en
+// la ruta, los más recientes primero. Cada uno trae `anulable` y, si no lo es, `motivo`.
+export async function getDocumentosDelDia(ruta, tipoDoc, fecha = new Date()) {
+  const a = anulacionDe(tipoDoc);
+  const db = await getDatabase();
+  const actual = await consecutivoActual(db, ruta, a);
+  const filas = await db.getAllAsync(
+    `SELECT e.COD_CIA, e.NUM_PED, e.COD_CLT, e.HOR_FIN, e.NUM_ITM, e.MON_CIV, e.MONEDA, e.ENVIADO,
+            (SELECT MIN(c.NOM_CLT) FROM CLIENTE c WHERE TRIM(c.COD_CLT) = TRIM(e.COD_CLT)) AS NOM_CLT,
+            EXISTS (SELECT 1 FROM COTIZACION_APROBACION a WHERE a.COD_ZON = e.COD_ZON AND a.NUM_PED = e.NUM_PED) AS APROBADA
+       FROM alFAC_ENC_PED e
+      WHERE e.COD_ZON = ? AND e.TIP_DOC = ? AND substr(e.FEC_PED, 1, 10) = ?
+      ORDER BY e.HOR_FIN DESC, e.NUM_PED DESC`,
+    [ruta, tipoDoc, diaISO(fecha)]
+  );
+  return filas.map((r) => {
+    const motivo = motivoNoAnulable(r, actual, a);
+    return {
+      compania: r.COD_CIA,
+      numero: r.NUM_PED,
+      cliente: r.COD_CLT,
+      nombreCliente: r.NOM_CLT ?? r.COD_CLT,
+      hora: r.HOR_FIN,
+      articulos: r.NUM_ITM ?? 0,
+      total: r.MON_CIV ?? 0,
+      moneda: r.MONEDA,
+      enviado: r.ENVIADO === 1,
+      anulable: !motivo,
+      motivo,
+    };
+  });
+}
+
+// Anula (borra del equipo) un pedido o cotización que aún no se envió y regresa el consecutivo de su
+// tipo en la ruta a su número, para que el próximo documento lo vuelva a usar. Quita también su
+// registro del reporte Mi día. La visita que se registró sola al guardarlo (notas '<Tipo> <número>',
+// ver ClientesScreen) pasa al estado "Sin necesidad de compra" (EFECT_VISITA_RT) con notas
+// "Pedido anulado" / "Cotización anulada"; si en esa visita se hizo antes otro documento, sus notas
+// son otras y la visita no se toca.
+// Devuelve { visitaActualizada } (false si no se encontró la visita o el estado).
+export async function anularDocumento({ ruta, numero, tipoDoc }) {
+  const a = anulacionDe(tipoDoc);
+  const db = await getDatabase();
+  let visitaActualizada = false;
+  await db.withTransactionAsync(async () => {
+    const enc = await db.getFirstAsync(
+      `SELECT e.COD_CIA, e.NUM_PED, e.TIP_DOC, e.ENVIADO, e.COD_CLT,
+              EXISTS (SELECT 1 FROM COTIZACION_APROBACION a WHERE a.COD_ZON = e.COD_ZON AND a.NUM_PED = e.NUM_PED) AS APROBADA
+         FROM alFAC_ENC_PED e WHERE e.COD_ZON = ? AND e.NUM_PED = ?`,
+      [ruta, numero]
+    );
+    if (!enc || enc.TIP_DOC !== tipoDoc) throw new Error(`No se encontró ${a.doc.el} ${numero} en la ruta ${ruta}.`);
+    const motivo = motivoNoAnulable(enc, await consecutivoActual(db, ruta, a), a);
+    if (motivo) throw new Error(`${motivo}: no se puede anular ${a.doc.el} ${numero}.`);
+
+    // alFAC_DET_PED no tiene COD_ZON: se borra por compañía y número (COD_CIA puede venir null).
+    await db.runAsync('DELETE FROM alFAC_DET_PED WHERE NUM_PED = ? AND COD_CIA IS ?', [numero, enc.COD_CIA]);
+    await db.runAsync('DELETE FROM alFAC_ENC_PED WHERE COD_ZON = ? AND NUM_PED = ?', [ruta, numero]);
+    await quitarActividad(db, a.actividad, `${ruta}|${numero}`);
+
+    // Visita del documento (aún sin enviar) -> "Sin necesidad de compra" + notas de anulación.
+    const estado = await db.getFirstAsync(
+      `SELECT EFECT_VISITA FROM EFECT_VISITA_RT
+        WHERE UPPER(DESCRIPCION) LIKE '%NECESIDAD%COMPRA%' ORDER BY EFECT_VISITA LIMIT 1`
+    );
+    if (estado) {
+      const res = await db.runAsync(
+        `UPDATE VISITA SET RAZON = ?, NOTAS = ?
+          WHERE CLIENTE = ? AND RUTA = ? AND NOTAS = ? AND ENVIADO = 0`,
+        [String(estado.EFECT_VISITA), a.notasVisita, enc.COD_CLT, ruta, `${a.doc.titulo} ${numero}`]
+      );
+      visitaActualizada = res.changes > 0;
+    }
+
+    // Consecutivo - 1: vuelve al número del documento anulado (el próximo lo reutiliza).
+    await db.runAsync(`UPDATE RUTA_CONSECUT_RT SET ${a.columna} = ? WHERE RUTA = ?`, [String(enc.NUM_PED).trim(), ruta]);
+    // El consecutivo corregido también debe llegar al servidor (ver services/enviarDatos).
+    await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('consecutivos_pendientes', '1')");
+  });
+  return { visitaActualizada };
 }

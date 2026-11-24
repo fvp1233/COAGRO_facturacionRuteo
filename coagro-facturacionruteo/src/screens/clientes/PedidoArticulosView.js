@@ -31,6 +31,7 @@ import {
   hoyISO,
   reglasVigentes,
 } from '../../repositories/descuentos';
+import { aplicarFlete, evaluarFlete, getFleteRuta } from '../../repositories/flete';
 import { getPromocionesCliente, mejorPromocion, promocionesDeArticulo } from '../../repositories/promociones';
 import { guardarPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
@@ -370,6 +371,8 @@ export default function PedidoArticulosView({
     exentoVentas: encabezado?.exentoVentas ?? 0,
     exentoConsumo: encabezado?.exentoConsumo ?? 0,
   };
+  // Flete de la ruta del documento (RUTA_CONSECUT_RT). null mientras carga = sin flete.
+  const [flete, setFlete] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -419,6 +422,19 @@ export default function PedidoArticulosView({
     setBorrador({ almacen: String(Math.max(1, Math.ceil(Number(articuloInicial.cantMin) || 0))) });
   }, [articuloInicial, articulos, cargando]);
 
+  // Configuración del flete de la ruta del documento. Si no se puede leer, no se cobra flete.
+  useEffect(() => {
+    let cancelado = false;
+    getFleteRuta(ruta)
+      .then((f) => {
+        if (!cancelado) setFlete(f);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [ruta]);
+
   // Si no se pueden leer las promociones, el pedido sigue sin ellas.
   useEffect(() => {
     let cancelado = false;
@@ -449,11 +465,16 @@ export default function PedidoArticulosView({
   const filtrados = useMemo(() => {
     if (!busqueda) return [];
     const q = normalizar(busqueda.q);
-    // Por defecto solo los artículos con existencia; con la casilla marcada, todos.
+    // Por defecto solo los artículos con existencia; con la casilla marcada, todos. El artículo de
+    // flete nunca se ofrece: lo agrega o quita la app según el mínimo.
+    const codigoFlete = flete?.articulo ?? null;
     return articulos.filter(
-      (a) => (sinExistencia || a.existencia > 0) && (!q || normalizar(a[busqueda.mode]).includes(q))
+      (a) =>
+        a.codigo !== codigoFlete &&
+        (sinExistencia || a.existencia > 0) &&
+        (!q || normalizar(a[busqueda.mode]).includes(q))
     );
-  }, [articulos, busqueda, sinExistencia]);
+  }, [articulos, busqueda, sinExistencia, flete]);
 
   // Solo se renderiza la página actual para no saturar el teléfono con miles de cards.
   const pagina = useMemo(
@@ -474,8 +495,21 @@ export default function PedidoArticulosView({
   // Descuentos vigentes hoy del artículo (aunque la cantidad aún no aplique), para el aviso.
   const vigentesArticulo = articulo ? reglasVigentes(reglasArticulo, hoy) : [];
 
-  const totalPedido = agregados.reduce((suma, l) => suma + l.total, 0);
   const monedaPedido = agregados[0]?.moneda ?? articulo?.moneda;
+  // Líneas del documento: las del vendedor + la del flete (al final) si no llega al mínimo. Se
+  // recalcula con cada cambio de líneas; guardar lo vuelve a calcular con la configuración leída de nuevo.
+  const lineas = useMemo(
+    () =>
+      aplicarFlete(
+        flete,
+        agregados,
+        { exentoVentas: encabezado?.exentoVentas ?? 0, exentoConsumo: encabezado?.exentoConsumo ?? 0 },
+        agregados[0]?.moneda ?? encabezado?.moneda ?? null
+      ),
+    [flete, agregados, encabezado?.exentoVentas, encabezado?.exentoConsumo, encabezado?.moneda]
+  );
+  const estadoFlete = useMemo(() => evaluarFlete(flete, agregados), [flete, agregados]);
+  const totalPedido = lineas.reduce((suma, l) => suma + l.total, 0);
 
   const cambiar = (campo) => (v) => setBorrador((prev) => ({ ...prev, [campo]: v }));
 
@@ -539,6 +573,8 @@ export default function PedidoArticulosView({
   const enPedido = useMemo(() => new Map(agregados.map((l) => [l.codigo, l])), [agregados]);
 
   const eliminar = (codigo) => {
+    // La línea del flete no se borra a mano: se quita sola al llegar al mínimo.
+    if (codigo === flete?.articulo) return;
     const l = agregados.find((x) => x.codigo === codigo);
     Alert.alert('Eliminar artículo', `¿Quitar ${l?.descripcion ?? codigo} ${tipo.del}?`, [
       { text: 'Cancelar', style: 'cancel' },
@@ -563,12 +599,25 @@ export default function PedidoArticulosView({
   const guardar = async (entrega, notas) => {
     try {
       const activa = await getRutaActiva();
+      // El flete se vuelve a calcular justo antes de guardar, con la configuración leída de nuevo.
+      const config = await getFleteRuta(ruta);
+      const finales = aplicarFlete(
+        config,
+        agregados,
+        datosCliente,
+        agregados[0]?.moneda ?? encabezado?.moneda ?? null
+      );
+      if (finales.some((l) => l.esFlete) && !config.articuloEnEquipo) {
+        throw new Error(
+          `El artículo de flete ${config.articulo} no está en el equipo. Descarga los datos en Datos > Cargar datos.`
+        );
+      }
       const numero = await guardarPedido({
         ruta,
         cliente: cliente.codigo,
         bodega: activa?.bodegaErp ?? null,
         encabezado,
-        lineas: agregados,
+        lineas: finales,
         entrega,
         notas,
         fin: new Date(),
@@ -650,11 +699,14 @@ export default function PedidoArticulosView({
             />
 
             <View style={styles.filtroRow}>
-              <Text style={styles.contador}>
-                {cargando ? '' : `${filtrados.length} ${filtrados.length === 1 ? 'artículo' : 'artículos'}`}
-              </Text>
+              <View style={styles.conteoBox}>
+                <Text style={styles.conteoTexto}>
+                  {cargando ? '' : `${filtrados.length} ${filtrados.length === 1 ? 'artículo' : 'artículos'}`}
+                </Text>
+              </View>
               <Checkbox
                 label="Incluir artículos sin existencia"
+                singleLine
                 checked={sinExistencia}
                 onChange={(v) => {
                   setSinExistencia(v);
@@ -809,15 +861,25 @@ export default function PedidoArticulosView({
         </KeyboardAvoidingView>
       </Modal>
 
+      {flete?.usaFlete && estadoFlete.faltante > 0 ? (
+        <View style={styles.fleteAviso}>
+          <Feather name="truck" size={16} color={colors.warning} />
+          <Text style={styles.fleteAvisoText}>
+            Faltan {monto(estadoFlete.faltante, monedaPedido ?? encabezado?.moneda ?? 'D')} para evitar el flete de{' '}
+            {monto(flete.monto, monedaPedido ?? encabezado?.moneda ?? 'D')} + IVA
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.bar}>
         <Pressable
           onPress={() => setVerAgregados(true)}
           style={({ pressed }) => [styles.barButton, styles.barSecondary, pressed && styles.pressed]}
         >
           <Feather name="search" size={20} color={ACCENT} />
-          {agregados.length ? (
+          {lineas.length ? (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{agregados.length}</Text>
+              <Text style={styles.badgeText}>{lineas.length}</Text>
             </View>
           ) : null}
         </Pressable>
@@ -835,7 +897,7 @@ export default function PedidoArticulosView({
 
       <ArticulosAgregadosModal
         visible={verAgregados}
-        lineas={agregados}
+        lineas={lineas}
         total={totalPedido}
         tipo={tipo}
         formatMonto={monto}
@@ -847,7 +909,7 @@ export default function PedidoArticulosView({
         cliente={cliente}
         encabezado={encabezado}
         tipo={tipo}
-        lineas={agregados}
+        lineas={lineas}
         formatMonto={monto}
         onGuardar={guardar}
         onClose={() => setVerResumen(false)}
@@ -874,11 +936,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   paginacion: { marginTop: spacing.md },
-  contador: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  // Conteo de artículos bajo el filtro: texto centrado dentro del recuadro.
+  conteoBox: {
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radius.sm + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    flexShrink: 0,
+  },
+  conteoTexto: { fontSize: 12, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
   emptyBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   // Descuento del cliente (DESCUENTO_CLIART): chip en la card y aviso en la captura.
   descChip: {
@@ -1092,4 +1164,15 @@ const styles = StyleSheet.create({
   barTotalLabel: { fontSize: 12, color: colors.textMuted },
   barTotalValue: { fontSize: 18, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
   pressed: { opacity: 0.8 },
+  fleteAviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  fleteAvisoText: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.text },
 });

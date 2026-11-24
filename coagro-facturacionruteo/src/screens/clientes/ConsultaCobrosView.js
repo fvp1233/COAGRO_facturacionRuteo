@@ -64,7 +64,8 @@ const aDocumento = (d) => {
 };
 
 // Card compacta: documento, vencimiento y saldo. La línea izquierda indica el estado de vencimiento.
-function DocumentoCard({ doc, onPress }) {
+// conEstado: muestra también la etiqueta de vencimiento (p. ej. "VENCIDO HACE 12 DÍAS").
+function DocumentoCard({ doc, conEstado, onPress }) {
   return (
     <Pressable
       onPress={onPress}
@@ -76,6 +77,7 @@ function DocumentoCard({ doc, onPress }) {
           <Feather name="calendar" size={12} color={colors.textMuted} />
           <Text style={styles.venceText}>Vence {doc.vence || '—'}</Text>
         </View>
+        {conEstado ? <Text style={[styles.estadoText, { color: doc.estado.texto }]}>{doc.estado.label}</Text> : null}
       </View>
       <Text style={styles.saldo}>{formatMonto(doc.saldo)}</Text>
       <Feather name="chevron-right" size={18} color={colors.textDisabled} />
@@ -154,7 +156,9 @@ function DocumentoModal({ doc, imprimiendo, onImprimir, onClose }) {
 // los mismos de Cobros; se descargan con Datos > Cargar datos).
 // Al tocar una card se abre un popup con el detalle y el botón Imprimir: descarga el PDF del backend
 // (requiere internet) y abre el menú del sistema para guardarlo o compartirlo (se imprime desde el celular).
-export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
+// soloVencidos: Consulta > Documentos; muestra solo los documentos con la fecha de vencimiento pasada
+// (los más atrasados primero) y el saldo vencido.
+export default function ConsultaCobrosView({ cliente, ruta, onBack, soloVencidos = false }) {
   const insets = useSafeAreaInsets();
   const [documentos, setDocumentos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -169,7 +173,11 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
     let cancelado = false;
     getDocumentosCobro({ cliente: cliente.codigo, ruta })
       .then((lista) => {
-        if (!cancelado) setDocumentos(lista.map(aDocumento));
+        if (cancelado) return;
+        const docs = lista.map(aDocumento);
+        setDocumentos(
+          soloVencidos ? docs.filter((d) => d.dias !== null && d.dias < 0).sort((a, b) => a.dias - b.dias) : docs
+        );
       })
       .catch((e) => {
         if (!cancelado) setError(e?.message || 'No se pudieron leer los documentos.');
@@ -180,7 +188,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
     return () => {
       cancelado = true;
     };
-  }, [cliente.codigo, ruta]);
+  }, [cliente.codigo, ruta, soloVencidos]);
 
   const resumen = useMemo(
     () => ({
@@ -221,7 +229,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Cobros" onBack={onBack} />
+      <CenteredHeader title={soloVencidos ? 'Documentos vencidos' : 'Cobros'} onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.resumen}>
@@ -231,7 +239,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
           </Text>
           <View style={styles.resumenFila}>
             <View>
-              <Text style={styles.saldoLabel}>SALDO PENDIENTE</Text>
+              <Text style={styles.saldoLabel}>{soloVencidos ? 'SALDO VENCIDO' : 'SALDO PENDIENTE'}</Text>
               <Text style={styles.resumenTotal}>{formatMonto(resumen.total)}</Text>
             </View>
             <View style={styles.resumenChips}>
@@ -241,7 +249,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
                   {documentos.length} {documentos.length === 1 ? 'documento' : 'documentos'}
                 </Text>
               </View>
-              {resumen.vencidos ? (
+              {resumen.vencidos && !soloVencidos ? (
                 <View style={[styles.chip, styles.chipVencido]}>
                   <Feather name="alert-circle" size={12} color="#A31A13" />
                   <Text style={[styles.chipText, styles.chipVencidoText]}>
@@ -260,7 +268,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
         ) : documentos.length ? (
           <>
             {pagina.map((d) => (
-              <DocumentoCard key={claveDoc(d)} doc={d} onPress={() => setDetalle(d)} />
+              <DocumentoCard key={claveDoc(d)} doc={d} conEstado={soloVencidos} onPress={() => setDetalle(d)} />
             ))}
             <View style={styles.paginacion}>
               <Pagination
@@ -278,7 +286,9 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack }) {
         ) : !error ? (
           <View style={styles.empty}>
             <Feather name="check-circle" size={32} color={colors.success} />
-            <Text style={styles.emptyText}>El cliente no tiene documentos pendientes de cobro</Text>
+            <Text style={styles.emptyText}>
+              {soloVencidos ? 'El cliente no tiene documentos vencidos' : 'El cliente no tiene documentos pendientes de cobro'}
+            </Text>
           </View>
         ) : null}
       </ScrollView>
@@ -352,6 +362,7 @@ const styles = StyleSheet.create({
   numero: { fontSize: 15, fontWeight: '700', color: colors.text },
   venceLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   venceText: { fontSize: 12, color: colors.textMuted },
+  estadoText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3, marginTop: 3 },
   saldo: { fontSize: 16, fontWeight: '800', color: colors.text },
   backdrop: {
     flex: 1,

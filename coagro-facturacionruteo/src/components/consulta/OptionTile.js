@@ -18,7 +18,7 @@ export default function OptionTile({ title, subtitle, icon, palette, onPress, st
         <View style={styles.iconBox}>
           <MaterialCommunityIcons name={icon} size={24} color={palette.iconColor ?? palette.accent} />
         </View>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={styles.title} numberOfLines={2}>{title}</Text>
         {subtitle ? (
           <Text style={[styles.subtitle, { color: palette.accent }]} numberOfLines={1}>
             {subtitle}
@@ -63,6 +63,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 12,

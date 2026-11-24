@@ -8,8 +8,9 @@ export const API_PREFIX = '/api/v1';
 // Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
 // Con null se usa el servidor guardado en la pantalla de Conexión.
 //export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
-export const BASE_URL = 'http://192.168.1.9:5000';            // Local (IP de esta PC en la red)
+export const BASE_URL = 'http://192.168.58.107:5000';            // Local (IP de esta PC en la red)
 //export const BASE_URL = null;
+//export const BASE_URL = 'http://192.168.1.9:5000';
 
 // /fr/mobile/registro y /fr/mobile/login no llevan token; el resto exige el token de la app
 // (Authorization: Bearer) y rol RUTA. Las rutas de la sync salen del token (no se manda ?ruta=).
