@@ -28,6 +28,9 @@ export const PATHS = {
   // /fr/mobile/recibo/<numDep>/pdf?ctaBco=<cuenta>&numDoc=<documento>.
   reciboPdf: (numDep, ctaBco, numDoc) =>
     `/fr/mobile/recibo/${encodeURIComponent(numDep)}/pdf?ctaBco=${encodeURIComponent(ctaBco ?? '')}&numDoc=${encodeURIComponent(numDoc ?? '')}`,
+  // Fichas técnicas de artículos: lista (ARTICULO + FECHA, sin PDF) y el PDF de un artículo.
+  fichaArticulo: '/fr/mobile/fichaArticulo',
+  fichaArticuloPdf: (articulo) => `/fr/mobile/fichaArticulo/${encodeURIComponent(articulo)}/pdf`,
   syncClientes: '/fr/sync/clientes',
   syncArticulos: '/fr/sync/articulos',
   syncCobros: '/fr/sync/cobros',
@@ -36,6 +39,10 @@ export const PATHS = {
   syncConsecutivos: '/fr/sync/consecutivos',
   // Cotizaciones (TIP_DOC 'C') de las rutas de la handheld, para aprobarlas desde la app.
   syncCotizaciones: '/fr/sync/cotizaciones',
+  // Notas de crédito de las rutas de la handheld: pendientes de procesar y las de los últimos ?dias.
+  syncNotasCredito: '/fr/sync/notasCredito?dias=30',
+  // Inventarios de clientes de las rutas de la handheld: pendientes de procesar y los de los últimos ?dias (máx. 180).
+  syncInventarios: '/fr/sync/inventarios?dias=30',
   // Existencias por lote (ARTICULO_EXISTENCIA_LOTE) de las bodegas de la handheld.
   syncLotes: '/fr/sync/lotes',
   // Historial de PEDIDOS y de FACTURAS del ERP de TODOS los clientes de las rutas de la handheld
@@ -51,13 +58,15 @@ export const PATHS = {
   syncMetas: '/fr/sync/metas',
   // Descuentos por cliente y artículo (DESCUENTO_CLIART) para pedidos y cotizaciones.
   syncDescuentos: '/fr/sync/descuentos',
-  // Promociones de la web (FR_PROMOCION, FR_PROMOCION_PRODUCTO y FR_PROMOCION_DESTINO).
+  // Promociones de la web (FR_PROMOCION, FR_PROMOCION_PRODUCTO, FR_PROMOCION_DESTINO y
+  // FR_PROMOCION_BONIFICADO = artículos que regala una promoción tipo 'B').
   syncPromociones: '/fr/sync/promociones',
   syncPromocionesProductos: '/fr/sync/promocionesProductos',
   syncPromocionesDestinos: '/fr/sync/promocionesDestinos',
+  syncPromocionesBonificados: '/fr/sync/promocionesBonificados',
   // Solicitudes de promocionales (tabla PROMOCIONAL) de las rutas de la handheld.
   syncPromocionales: '/fr/sync/promocionales',
-  // División territorial de la reforma: municipios nuevos (FR_MUNICIPIO) y distrito -> municipio (FR_DISTRITO).
+  // División territorial (catálogos de Softland, país 'ESA'): departamentos, municipios y distritos.
   syncMunicipios: '/fr/sync/municipios',
   // Datos públicos del emisor (dte.dbo.empresa) para armar el PDF del pedido sin conexión.
   syncEmpresa: '/fr/sync/empresa',

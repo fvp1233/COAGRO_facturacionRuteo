@@ -7,7 +7,15 @@ import { StatusBar } from 'expo-status-bar';
 import CenteredHeader from '../../components/ui/CenteredHeader';
 import CuentaBancoSelect from '../../components/cobros/CuentaBancoSelect';
 import { getCuentasBanco } from '../../repositories/cuentasBanco';
-import { FORMAS_PAGO, MAX_NOTAS_RECIBO, getPagosDocumento, registrarPago } from '../../repositories/pagos';
+import {
+  FORMAS_PAGO,
+  MAX_NOTAS_RECIBO,
+  claveCuenta,
+  cuentaDeForma,
+  getPagosDocumento,
+  registrarPago,
+  usaCuentaPrincipal,
+} from '../../repositories/pagos';
 import { formatMonto } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 
@@ -52,6 +60,12 @@ const formatFechaHora = (v) => {
 
 let siguienteId = 1;
 const chequeVacio = () => ({ id: siguienteId++, numero: '', banco: '', cuenta: '', fecha: hoyTexto(), monto: '' });
+// Transferencia o depósito del cliente. cuenta: cuenta de la empresa a la que entró; null = la cuenta
+// principal del recibo (la sigue mientras el cobrador no elija otra).
+const bancariaVacia = () => ({ id: siguienteId++, monto: '', transaccion: '', cuenta: null });
+
+// Forma de pago de la pantalla ('cheques', 'efectivo', ...) -> FORMA de COBRO_PAGO_DET.
+const FORMA_DE_METODO = { cheques: 'CHEQUE', efectivo: 'EFECTIVO', transferencia: 'TRANSFERENCIA', deposito: 'DEPOSITO' };
 
 function Campo({ label, value, onChangeText, placeholder, keyboardType }) {
   const [focused, setFocused] = useState(false);
@@ -122,6 +136,9 @@ const detalleCheque = (c) =>
 const detalleBancario = (forma, transaccion) =>
   transaccion ? (forma === 'DEPOSITO' ? `Boleta ${transaccion}` : `Trans. ${transaccion}`) : null;
 
+// Nombre corto de una cuenta de la empresa: "Nombre · Cta. 123".
+const nombreCuenta = (c) => (c ? [c.nombre || c.banco, `Cta. ${c.cuenta}`].filter(Boolean).join(' · ') : null);
+
 // Pantalla de pago de un documento (Cobros > Documentos a cobrar > Pagar).
 // - Pago híbrido: se pueden combinar cheques (varios), efectivo, transferencia y depósito; los montos
 //   de todas las formas se suman en "pagado".
@@ -133,8 +150,10 @@ const detalleBancario = (forma, transaccion) =>
 // - Total a pagar: lo que se debe pagar de este documento (su saldo actual).
 // - Saldo restante: total a pagar − pagado.
 // - Saldo pendiente: saldo del documento − pagado (lo que le faltará pagar a este documento).
-// Cada pago es un RECIBO (número = RUTA_CONSECUT_RT.RECIBO de la ruta) con UNA cuenta de banco: la
-// de la transferencia/depósito del cliente o donde se depositará el efectivo y los cheques.
+// Cada pago es un RECIBO (número = RUTA_CONSECUT_RT.RECIBO de la ruta). El cliente puede repartirlo
+// entre varias cuentas de banco: cada transferencia y cada depósito lleva su cuenta (por defecto la
+// principal) y el efectivo y los cheques van a la cuenta principal (ver pagos.FORMAS_CUENTA_PRINCIPAL).
+// Con un solo banco se usa igual que siempre: se elige la principal y todo entra ahí.
 // onPagado({ idPago, recibo, pagado, saldoPendiente }) se llama después de guardar el pago.
 // onVerRecibo(idPago) abre el recibo de un abono anterior.
 export default function PagoView({
@@ -153,10 +172,11 @@ export default function PagoView({
   const [metodo, setMetodo] = useState('cheques');
   const [cheques, setCheques] = useState(() => [chequeVacio()]);
   const [efectivo, setEfectivo] = useState('');
-  const [transferencia, setTransferencia] = useState({ monto: '', transaccion: '' });
-  const [deposito, setDeposito] = useState({ monto: '', transaccion: '' });
-  // Cuenta de banco del recibo ({ clave, compania, banco, cuenta, nombre, moneda }) o null.
-  const [cuentaRecibo, setCuentaRecibo] = useState(null);
+  const [transferencias, setTransferencias] = useState(() => [bancariaVacia()]);
+  const [depositos, setDepositos] = useState(() => [bancariaVacia()]);
+  // Cuenta principal del recibo ({ clave, compania, banco, cuenta, nombre, moneda }) o null: la del
+  // efectivo y los cheques, y la que toman por defecto las transferencias y los depósitos.
+  const [cuentaPrincipal, setCuentaPrincipal] = useState(null);
   const [abonos, setAbonos] = useState([]);
   const [cuentas, setCuentas] = useState([]);
   const [guardando, setGuardando] = useState(false);
@@ -189,15 +209,18 @@ export default function PagoView({
     };
   }, [cliente.codigo, ruta, documento.codTipo, documento.documento]);
 
+  const sumaMontos = (lista) => lista.reduce((s, x) => s + aNumero(x.monto), 0);
   const montos = useMemo(
     () => ({
-      cheques: cheques.reduce((s, c) => s + aNumero(c.monto), 0),
+      cheques: sumaMontos(cheques),
       efectivo: aNumero(efectivo),
-      transferencia: aNumero(transferencia.monto),
-      deposito: aNumero(deposito.monto),
+      transferencia: sumaMontos(transferencias),
+      deposito: sumaMontos(depositos),
     }),
-    [cheques, efectivo, transferencia.monto, deposito.monto],
+    [cheques, efectivo, transferencias, depositos],
   );
+  // Cuenta en la que entra una transferencia o un depósito (la suya o la principal).
+  const cuentaBancaria = (x) => x.cuenta ?? cuentaPrincipal;
   const pagado = montos.cheques + montos.efectivo + montos.transferencia + montos.deposito;
   const saldoRestante = totalAPagar - pagado;
   const saldoPendiente = saldoDocumento - pagado;
@@ -218,9 +241,14 @@ export default function PagoView({
     cambiarCheque(ultimo.id, 'monto', aTexto(falta));
   };
 
+  // ¿Alguna forma con monto va a la cuenta principal (efectivo, cheques)?
+  const usaPrincipal = METODOS.some((m) => montos[m.key] > 0 && usaCuentaPrincipal(FORMA_DE_METODO[m.key]));
+
   const validar = () => {
     if (pagado <= 0) return 'Ingresa el monto de al menos una forma de pago.';
-    if (!cuentaRecibo) return 'Selecciona la cuenta de banco del recibo.';
+    if (usaPrincipal && !cuentaPrincipal) {
+      return 'Selecciona la cuenta principal del recibo (donde se depositarán el efectivo y los cheques).';
+    }
     if (pagado - saldoDocumento > EPS) {
       return `El monto pagado (${formatMonto(pagado)}) supera el saldo del documento (${formatMonto(saldoDocumento)}).`;
     }
@@ -229,19 +257,25 @@ export default function PagoView({
       if (!c.numero.trim() || !c.cuenta.trim()) return 'Cada cheque con monto debe tener número de cheque y número de cuenta.';
       if (!fechaValida(c.fecha)) return `La fecha del cheque ${c.numero} no es válida (DD/MM/AAAA).`;
     }
-    for (const [nombre, t] of [['transferencia', transferencia], ['depósito', deposito]]) {
-      if (!aNumero(t.monto)) continue;
-      if (!t.transaccion.trim()) {
-        return nombre === 'depósito'
-          ? 'El depósito debe tener el número de boleta.'
-          : 'La transferencia debe tener el número de transacción.';
+    for (const [nombre, lista] of [['transferencia', transferencias], ['depósito', depositos]]) {
+      for (const t of lista) {
+        if (!aNumero(t.monto)) continue;
+        if (!t.transaccion.trim()) {
+          return nombre === 'depósito'
+            ? 'Cada depósito debe tener el número de boleta.'
+            : 'Cada transferencia debe tener el número de transacción.';
+        }
+        if (!cuentaBancaria(t)) return `Selecciona la cuenta de banco de cada ${nombre}.`;
       }
     }
     return null;
   };
 
-  // Transferencia / depósito: van a la cuenta del recibo; se guarda su número o boleta.
-  const formaBancaria = (forma, monto, datos) => ({ forma, monto, transaccion: datos.transaccion.trim() });
+  // Transferencia / depósito: se guarda su número o boleta y la cuenta a la que entró.
+  const formasBancarias = (forma, lista) =>
+    lista
+      .filter((t) => aNumero(t.monto))
+      .map((t) => ({ forma, monto: aNumero(t.monto), transaccion: t.transaccion.trim(), cuentaDeposito: cuentaBancaria(t) }));
 
   // Formas de pago con monto, en el formato de COBRO_PAGO_DET.
   const formasDelPago = () => [
@@ -256,9 +290,22 @@ export default function PagoView({
         fecha: c.fecha,
       })),
     ...(montos.efectivo ? [{ forma: 'EFECTIVO', monto: montos.efectivo }] : []),
-    ...(montos.transferencia ? [formaBancaria('TRANSFERENCIA', montos.transferencia, transferencia)] : []),
-    ...(montos.deposito ? [formaBancaria('DEPOSITO', montos.deposito, deposito)] : []),
+    ...formasBancarias('TRANSFERENCIA', transferencias),
+    ...formasBancarias('DEPOSITO', depositos),
   ];
+
+  // Lo que entra en cada cuenta con las formas capturadas: [{ cuenta, monto }], en orden de aparición.
+  const porCuenta = (() => {
+    const m = new Map();
+    for (const f of formasDelPago()) {
+      const c = cuentaDeForma(f, cuentaPrincipal);
+      if (!c) continue;
+      const actual = m.get(claveCuenta(c)) ?? { cuenta: c, monto: 0 };
+      m.set(claveCuenta(c), { ...actual, monto: actual.monto + f.monto });
+    }
+    return [...m.values()];
+  })();
+  const variasCuentas = porCuenta.length > 1;
 
   const guardar = async () => {
     setGuardando(true);
@@ -270,7 +317,7 @@ export default function PagoView({
         documento: documento.documento,
         compania: documento.compania,
         moneda,
-        cuenta: cuentaRecibo,
+        cuentaPrincipal,
         notas,
         saldoAnterior: saldoDocumento,
         saldoServidor: moneda === 'Dólar' ? documento.saldoServidorDolar : documento.saldoServidorLocal,
@@ -290,7 +337,12 @@ export default function PagoView({
       Alert.alert('Revisa el pago', error);
       return;
     }
-    const formas = formasUsadas.map((m) => `• ${m.label}: ${formatMonto(montos[m.key])}`).join('\n');
+    const formas = [
+      ...formasUsadas.map((m) => `• ${m.label}: ${formatMonto(montos[m.key])}`),
+      ...(variasCuentas
+        ? ['', 'Por cuenta:', ...porCuenta.map((x) => `• ${nombreCuenta(x.cuenta)}: ${formatMonto(x.monto)}`)]
+        : []),
+    ].join('\n');
     const mensaje = completo
       ? `Se paga el documento ${documento.documento} por completo (${formatMonto(pagado)}).`
       : `Abono de ${formatMonto(pagado)} al documento ${documento.documento}.\nQuedarán pendientes ${formatMonto(saldoPendiente)}.`;
@@ -300,35 +352,66 @@ export default function PagoView({
     ]);
   };
 
-  // Transferencia y depósito tienen los mismos campos.
-  const renderBancario = (key, datos, setDatos, etiqueta) => (
-    <>
-      <View style={styles.fila}>
+  // Transferencias y depósitos: una lista (como los cheques), cada uno con su monto, su número y la
+  // cuenta de la empresa a la que entró. "Completar" llena el último.
+  const renderBancario = (key, lista, setLista, etiqueta) => {
+    const ultimo = lista[lista.length - 1];
+    const cambiar = (id, campo, valor) => setLista((l) => l.map((x) => (x.id === id ? { ...x, [campo]: valor } : x)));
+    const faltaUltimo = Math.max(0, saldoDocumento - (pagado - aNumero(ultimo.monto)));
+    const titulo = key === 'deposito' ? 'Depósito' : 'Transferencia';
+    return (
+      <>
         <Valor label="Total a pagar" valor={saldoTotal} />
-        <Campo
-          label={`Monto ${etiqueta}`}
-          value={datos.monto}
-          onChangeText={(v) => setDatos((d) => ({ ...d, monto: v }))}
-          placeholder="0.00"
-          keyboardType="decimal-pad"
-        />
-      </View>
-      <Completar
-        disabled={faltaSin(key) <= EPS}
-        onPress={() => setDatos((d) => ({ ...d, monto: aTexto(faltaSin(key)) }))}
-      />
-      <View style={styles.fila}>
-        <Valor label="Saldo restante" valor={saldoRestante} alerta={saldoRestante < -EPS} />
-        <Valor label="Saldo pendiente" valor={saldoPendiente} alerta={saldoPendiente < -EPS} />
-      </View>
-      <Campo
-        label={key === 'deposito' ? 'Número de boleta (solo dígitos)' : 'Número de transacción (solo dígitos)'}
-        value={datos.transaccion}
-        onChangeText={(v) => setDatos((d) => ({ ...d, transaccion: v.replace(/\D/g, '') }))}
-        keyboardType="number-pad"
-      />
-    </>
-  );
+        {lista.map((x, i) => (
+          <View key={x.id} style={styles.cheque}>
+            <View style={styles.chequeHeader}>
+              <Text style={styles.chequeTitulo}>{titulo} {i + 1}</Text>
+              {lista.length > 1 ? (
+                <Pressable hitSlop={10} onPress={() => setLista((l) => l.filter((y) => y.id !== x.id))}>
+                  <Feather name="trash-2" size={18} color={colors.primary} />
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.fila}>
+              <Campo
+                label={`Monto ${etiqueta}`}
+                value={x.monto}
+                onChangeText={(v) => cambiar(x.id, 'monto', v)}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+              />
+              <Campo
+                label={key === 'deposito' ? 'No. de boleta (dígitos)' : 'No. de transacción (dígitos)'}
+                value={x.transaccion}
+                onChangeText={(v) => cambiar(x.id, 'transaccion', v.replace(/\D/g, ''))}
+                keyboardType="number-pad"
+              />
+            </View>
+            <CuentaBancoSelect
+              label={x.cuenta ? 'Cuenta a la que entró' : 'Cuenta a la que entró (la principal)'}
+              cuentas={cuentas}
+              value={cuentaBancaria(x)?.clave ?? null}
+              onChange={(c) => cambiar(x.id, 'cuenta', c)}
+            />
+          </View>
+        ))}
+        <View style={styles.fila}>
+          <Pressable
+            onPress={() => setLista((l) => [...l, bancariaVacia()])}
+            style={({ pressed }) => [styles.agregar, pressed && styles.pressed]}
+          >
+            <Feather name="plus" size={16} color={colors.primary} />
+            <Text style={styles.agregarText}>Agregar {etiqueta}</Text>
+          </Pressable>
+        </View>
+        <Completar disabled={faltaUltimo <= EPS} onPress={() => cambiar(ultimo.id, 'monto', aTexto(faltaUltimo))} />
+        <View style={styles.fila}>
+          <Valor label="Saldo restante" valor={saldoRestante} alerta={saldoRestante < -EPS} />
+          <Valor label="Saldo pendiente" valor={saldoPendiente} alerta={saldoPendiente < -EPS} />
+        </View>
+      </>
+    );
+  };
 
   const renderMetodo = () => {
     switch (metodo) {
@@ -393,9 +476,9 @@ export default function PagoView({
           </>
         );
       case 'transferencia':
-        return renderBancario('transferencia', transferencia, setTransferencia, 'transferencia');
+        return renderBancario('transferencia', transferencias, setTransferencias, 'transferencia');
       default:
-        return renderBancario('deposito', deposito, setDeposito, 'depósito');
+        return renderBancario('deposito', depositos, setDepositos, 'depósito');
     }
   };
 
@@ -405,7 +488,7 @@ export default function PagoView({
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Pagar" onBack={onBack} />
+      <CenteredHeader info={'Registra el pago del documento: elige la cuenta principal del recibo y escribe el monto en cada forma de pago. Puedes combinar formas, repartir transferencias y depósitos en varias cuentas o abonar solo una parte.'} title="Pagar" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.infoCard}>
@@ -428,13 +511,13 @@ export default function PagoView({
 
         <View style={styles.card}>
           <CuentaBancoSelect
-            label="Cuenta de banco del recibo"
+            label="Cuenta principal del recibo"
             cuentas={cuentas}
-            value={cuentaRecibo?.clave ?? null}
-            onChange={setCuentaRecibo}
+            value={cuentaPrincipal?.clave ?? null}
+            onChange={setCuentaPrincipal}
           />
           <Text style={styles.lineaDetalle}>
-            Donde entra el pago: la cuenta de la transferencia o del depósito del cliente, o donde se depositarán el efectivo y los cheques.
+            Donde se depositarán el efectivo y los cheques. Las transferencias y los depósitos entran aquí, salvo que les elijas otra cuenta.
           </Text>
         </View>
 
@@ -492,14 +575,34 @@ export default function PagoView({
                 />
               ))}
             {montos.efectivo ? <LineaMonto label="Efectivo" monto={montos.efectivo} /> : null}
-            {montos.transferencia ? (
-              <LineaMonto label="Transferencia" detalle={detalleBancario('TRANSFERENCIA', transferencia.transaccion)} monto={montos.transferencia} />
-            ) : null}
-            {montos.deposito ? (
-              <LineaMonto label="Depósito" detalle={detalleBancario('DEPOSITO', deposito.transaccion)} monto={montos.deposito} />
-            ) : null}
+            {[
+              ['TRANSFERENCIA', 'Transferencia', transferencias],
+              ['DEPOSITO', 'Depósito', depositos],
+            ].flatMap(([forma, label, lista]) =>
+              lista
+                .filter((x) => aNumero(x.monto))
+                .map((x) => (
+                  <LineaMonto
+                    key={x.id}
+                    label={label}
+                    detalle={[detalleBancario(forma, x.transaccion), variasCuentas ? nombreCuenta(cuentaBancaria(x)) : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    monto={aNumero(x.monto)}
+                  />
+                ))
+            )}
             <View style={styles.separador} />
             <LineaMonto label="Total pagado" monto={pagado} fuerte />
+            {variasCuentas ? (
+              <>
+                <View style={styles.separador} />
+                <Text style={styles.lineaDetalle}>Por cuenta (se envía un depósito por cuenta, mismo recibo)</Text>
+                {porCuenta.map((x) => (
+                  <LineaMonto key={claveCuenta(x.cuenta)} label={nombreCuenta(x.cuenta)} monto={x.monto} />
+                ))}
+              </>
+            ) : null}
           </View>
         ) : null}
 

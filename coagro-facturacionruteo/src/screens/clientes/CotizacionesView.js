@@ -145,7 +145,7 @@ export default function CotizacionesView({ cliente, ruta, onBack, onNueva, onApr
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Cotizaciones" onBack={onBack} />
+      <CenteredHeader info={'Cotizaciones del cliente. Usa Nueva para crear una; selecciona una para aprobarla (pasa a pedido) o imprimirla.'} title="Cotizaciones" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>

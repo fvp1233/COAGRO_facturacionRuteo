@@ -32,7 +32,13 @@ import {
   reglasVigentes,
 } from '../../repositories/descuentos';
 import { aplicarFlete, evaluarFlete, getFleteRuta } from '../../repositories/flete';
-import { getPromocionesCliente, mejorPromocion, promocionesDeArticulo } from '../../repositories/promociones';
+import {
+  bonificacionesDeLinea,
+  getPromocionesCliente,
+  mejorPromocion,
+  promocionesDeArticulo,
+  regalosDocumento,
+} from '../../repositories/promociones';
 import { guardarPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
 import { imprimirPedido } from '../../services/pedidoPdf';
@@ -57,8 +63,10 @@ const valor = (texto) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Bonificación: aún no se descargan las tablas de bonificación (BONIFICACION_CLIART / _NIVEL).
-const BONIFICACION = 0;
+// Precio con que va la línea regalada (ART_BON '1'): sin precio, sin descuento y sin impuestos
+// (MON_PRC_MX = 0, MON_TOT = 0). La línea comprada conserva su precio y su descuento.
+// PENDIENTE: confirmar con el backend; si piden precio de lista con 100 % de descuento, cambiar aquí.
+const PRECIO_REGALO = 0;
 
 // Cantidad en unidades de almacén (ej. 1.5 barriles) -> "1 BARRIL + 100 LT" (detalle = fracción × factor).
 // Si el factor es 1 el artículo no se fracciona y solo se muestra el almacén.
@@ -97,8 +105,13 @@ function normalizarDetalle(linea, factor) {
 // ganador = el que define el tope.
 // Adicional = impuestos del artículo sobre el subtotal con descuento: IMPUESTO1 menos la exención de
 // ventas del cliente e IMPUESTO2 menos la de consumo. Inventario = existencia − lo pedido.
-function calcular(articulo, linea, cliente, reglas, hoy, promos) {
-  const cantidad = valor(linea.almacen) + (articulo.factorVenta > 1 ? valor(linea.detalle) / articulo.factorVenta : 0);
+// regalado: unidades de este mismo artículo que el documento regala (bonificaciones), también salen
+// del inventario.
+const cantidadDe = (articulo, linea) =>
+  valor(linea.almacen) + (articulo.factorVenta > 1 ? valor(linea.detalle) / articulo.factorVenta : 0);
+
+function calcular(articulo, linea, cliente, reglas, hoy, promos, regalado = 0) {
+  const cantidad = cantidadDe(articulo, linea);
   const subtotal = cantidad * articulo.precio;
   const regla = descuentoAplicable(reglas, cantidad, hoy);
   const promo = mejorPromocion(promos ?? [], cantidad, articulo.precio);
@@ -119,9 +132,49 @@ function calcular(articulo, linea, cliente, reglas, hoy, promos) {
   const exoneracion = (base * (articulo.impuesto1 * cliente.exentoVentas + articulo.impuesto2 * cliente.exentoConsumo)) / 10000;
   const adicional = iva + oi;
   const total = base + adicional;
-  const inventario = articulo.existencia - cantidad - BONIFICACION;
+  const inventario = articulo.existencia - cantidad - regalado;
   return { cantidad, subtotal, regla, promo, ganador, tope, porcDescuento, descuento, iva, oi, exoneracion, adicional, total, inventario };
 }
+
+// Línea regalada del documento (ART_BON '1') con la misma forma que las del vendedor (la guarda
+// guardarPedido). regalo: uno de regalosDocumento (artículo regalado + cantidad sumada en unidades de
+// almacén). La cantidad se parte en almacén (entero) + detalle (fracción × factor). No se edita ni se
+// borra a mano: sale sola de las líneas compradas.
+function lineaRegalo(regalo, moneda) {
+  const factor = regalo.factorVenta > 0 ? regalo.factorVenta : 1;
+  const almacen = factor > 1 ? Math.floor(regalo.cantidad + 1e-9) : regalo.cantidad;
+  const detalle = factor > 1 ? Math.round((regalo.cantidad - almacen) * factor * 1e6) / 1e6 : 0;
+  return {
+    codigo: regalo.articulo,
+    descripcion: regalo.descripcion || regalo.articulo,
+    moneda,
+    precio: PRECIO_REGALO,
+    almacen,
+    detalle,
+    cantidad: regalo.cantidad,
+    cantidadTexto: unidades(regalo.cantidad, { factorVenta: factor, empAlm: regalo.empAlm, empDet: regalo.empDet }),
+    porcDescuento: 0,
+    canastaBasica: regalo.canastaBasica,
+    subtotal: 0,
+    descuento: 0,
+    iva: 0,
+    oi: 0,
+    exoneracion: 0,
+    adicional: 0,
+    factorVenta: factor,
+    impuesto1: regalo.impuesto1,
+    impuesto2: regalo.impuesto2,
+    esOtroCargo: regalo.esOtroCargo,
+    total: 0,
+    bonificado: true,
+    encontrado: regalo.encontrado,
+    promociones: regalo.promociones,
+  };
+}
+
+// Texto de los regalos de una bonificación: "2 de ABONO X (101), 4 de 16072".
+const textoRegalos = (regalos) =>
+  regalos.map((r) => `${formatCantidad(r.cantidad)} de ${r.descripcion ? `${r.descripcion} (${r.articulo})` : r.articulo}`).join(', ');
 
 // Card de un artículo: código, descripción, precio por unidad de almacén y existencia. Si ya está en
 // el pedido se marca con su cantidad (al tocarla se carga lo capturado para corregirlo).
@@ -247,8 +300,9 @@ function Dato({ label, value, alerta = false }) {
 // especiales (el tope se descubre solo con el contador):
 // - verde: hay descuento disponible para la cantidad (el que deja el precio más bajo; no se suman).
 // - ámbar: lo que aún no aplica por la cantidad (desde qué cantidad hay descuento o promoción).
-// - bonificación de la promoción que cumple: solo informativa (va aparte de los descuentos).
-function AvisoDescuento({ calculo, vigentes, promos, empAlm }) {
+// - bonificaciones (promociones tipo 'B') que gana la cantidad: van como líneas regaladas aparte y no
+//   cambian el precio de esta línea.
+function AvisoDescuento({ calculo, vigentes, promos, bonificaciones, empAlm }) {
   const und = empAlm || 'unid.';
   const { regla, promo, ganador, cantidad } = calculo;
   const nombrePromo = ({ promo: p }) => `«${p.titulo || `Promoción ${p.id}`}»`;
@@ -270,26 +324,27 @@ function AvisoDescuento({ calculo, vigentes, promos, empAlm }) {
     }
   }
   const noSuman = regla && promo ? 'Hay descuento del cliente y promoción: no se suman, se aplica el de menor precio.' : null;
-  const bonificaciones = promos.filter(
-    (c) => c.promo.articuloBonificado && cantidad >= (Number(c.producto.cantidadMin) || 0) && cantidad > 0
-  );
+  const ok = ganador || bonificaciones.length > 0;
 
   return (
-    <View style={[styles.descAviso, ganador ? styles.descAvisoOk : styles.descAvisoPend]}>
-      <Feather name={promo ? 'gift' : 'tag'} size={16} color={ganador ? colors.success : colors.warning} />
+    <View style={[styles.descAviso, ok ? styles.descAvisoOk : styles.descAvisoPend]}>
+      <Feather
+        name={promo || bonificaciones.length ? 'gift' : 'tag'}
+        size={16}
+        color={ok ? colors.success : colors.warning}
+      />
       <View style={styles.descAvisoTexts}>
         {aplicado ? <Text style={styles.descAvisoText}>{aplicado}</Text> : null}
         {noSuman ? <Text style={styles.descAvisoText}>{noSuman}</Text> : null}
         {pendientes.length ? (
           <Text style={styles.descAvisoText}>
-            {ganador ? 'Con más cantidad: ' : 'La cantidad aún no aplica: '}
+            {ok ? 'Con más cantidad: ' : 'La cantidad aún no aplica: '}
             {pendientes.join(' ')}
           </Text>
         ) : null}
-        {bonificaciones.map((c) => (
-          <Text key={c.producto.id} style={styles.descAvisoText}>
-            Bonificación: {formatCantidad(c.promo.cantidadBonificada ?? 0)} de{' '}
-            {c.promo.bonificadoDescripcion || c.promo.articuloBonificado} (va aparte).
+        {bonificaciones.map((b) => (
+          <Text key={b.promo.id} style={styles.descAvisoText}>
+            Bonificación {nombrePromo(b)}: {textoRegalos(b.regalos)} (va como línea regalada, sin cambiar el precio).
           </Text>
         ))}
       </View>
@@ -487,26 +542,56 @@ export default function PedidoArticulosView({
     listaRef.current?.scrollToOffset({ offset: 0, animated: false });
   };
 
+  // Promociones vigentes de un artículo ([{ promo, producto }]).
+  const candidatasDe = (codigo) => promosPorArticulo.get(codigo) ?? [];
+
   const articulo = articulos.find((a) => a.codigo === seleccion) ?? null;
   const linea = articulo ? { almacen: '', detalle: '', canastaBasica: articulo.canastaBasica, ...borrador } : null;
   const reglasArticulo = articulo ? reglasDescuento.get(claveArticulo(articulo.codigo)) : null;
-  const promosArticulo = articulo ? promosPorArticulo.get(articulo.codigo) ?? [] : [];
-  const calculo = articulo ? calcular(articulo, linea, datosCliente, reglasArticulo, hoy, promosArticulo) : null;
+  const promosArticulo = articulo ? candidatasDe(articulo.codigo) : [];
+  // Lo que este mismo artículo saldría regalado con la cantidad capturada (en lugar de su línea actual).
+  const regaladoArticulo = articulo
+    ? regalosDocumento(
+        [
+          ...agregados.filter((l) => l.codigo !== articulo.codigo),
+          { codigo: articulo.codigo, cantidad: cantidadDe(articulo, linea) },
+        ],
+        candidatasDe
+      ).find((r) => claveArticulo(r.articulo) === claveArticulo(articulo.codigo))?.cantidad ?? 0
+    : 0;
+  const calculo = articulo
+    ? calcular(articulo, linea, datosCliente, reglasArticulo, hoy, promosArticulo, regaladoArticulo)
+    : null;
+  // Bonificaciones que gana la línea que se captura (promociones tipo 'B').
+  const bonificacionesArticulo = articulo ? bonificacionesDeLinea(promosArticulo, calculo.cantidad) : [];
+  const unidadesRegalo = bonificacionesArticulo.reduce(
+    (s, b) => s + b.regalos.reduce((t, r) => t + r.cantidad, 0),
+    0
+  );
   // Descuentos vigentes hoy del artículo (aunque la cantidad aún no aplique), para el aviso.
   const vigentesArticulo = articulo ? reglasVigentes(reglasArticulo, hoy) : [];
 
   const monedaPedido = agregados[0]?.moneda ?? articulo?.moneda;
-  // Líneas del documento: las del vendedor + la del flete (al final) si no llega al mínimo. Se
-  // recalcula con cada cambio de líneas; guardar lo vuelve a calcular con la configuración leída de nuevo.
+  // Líneas regaladas (ART_BON '1') que ganan las líneas compradas, una por artículo regalado.
+  const lineasRegalo = useMemo(
+    () =>
+      regalosDocumento(agregados, (codigo) => promosPorArticulo.get(codigo) ?? []).map((r) =>
+        lineaRegalo(r, agregados[0]?.moneda ?? encabezado?.moneda ?? null)
+      ),
+    [agregados, promosPorArticulo, encabezado?.moneda]
+  );
+  // Líneas del documento: las del vendedor + las regaladas + la del flete (al final) si no llega al
+  // mínimo (las regaladas valen 0: no cuentan para el mínimo). Se recalcula con cada cambio de
+  // líneas; guardar lo vuelve a calcular con la configuración leída de nuevo.
   const lineas = useMemo(
     () =>
       aplicarFlete(
         flete,
-        agregados,
+        [...agregados, ...lineasRegalo],
         { exentoVentas: encabezado?.exentoVentas ?? 0, exentoConsumo: encabezado?.exentoConsumo ?? 0 },
         agregados[0]?.moneda ?? encabezado?.moneda ?? null
       ),
-    [flete, agregados, encabezado?.exentoVentas, encabezado?.exentoConsumo, encabezado?.moneda]
+    [flete, agregados, lineasRegalo, encabezado?.exentoVentas, encabezado?.exentoConsumo, encabezado?.moneda]
   );
   const estadoFlete = useMemo(() => evaluarFlete(flete, agregados), [flete, agregados]);
   const totalPedido = lineas.reduce((suma, l) => suma + l.total, 0);
@@ -573,9 +658,11 @@ export default function PedidoArticulosView({
   const enPedido = useMemo(() => new Map(agregados.map((l) => [l.codigo, l])), [agregados]);
 
   const eliminar = (codigo) => {
-    // La línea del flete no se borra a mano: se quita sola al llegar al mínimo.
+    // La línea del flete no se borra a mano: se quita sola al llegar al mínimo. Las regaladas no
+    // llegan aquí (no tienen botón): salen solas de las compradas.
     if (codigo === flete?.articulo) return;
     const l = agregados.find((x) => x.codigo === codigo);
+    if (!l) return;
     Alert.alert('Eliminar artículo', `¿Quitar ${l?.descripcion ?? codigo} ${tipo.del}?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -601,9 +688,15 @@ export default function PedidoArticulosView({
       const activa = await getRutaActiva();
       // El flete se vuelve a calcular justo antes de guardar, con la configuración leída de nuevo.
       const config = await getFleteRuta(ruta);
+      const sinArticulo = lineasRegalo.filter((l) => !l.encontrado).map((l) => l.codigo);
+      if (sinArticulo.length) {
+        throw new Error(
+          `El artículo regalado ${sinArticulo.join(', ')} no está en el equipo. Descarga los datos en Datos > Cargar datos.`
+        );
+      }
       const finales = aplicarFlete(
         config,
-        agregados,
+        [...agregados, ...lineasRegalo],
         datosCliente,
         agregados[0]?.moneda ?? encabezado?.moneda ?? null
       );
@@ -655,7 +748,7 @@ export default function PedidoArticulosView({
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title={`Artículos ${tipo.del}`} onBack={salir} />
+      <CenteredHeader info={`Busca y agrega los artículos ${tipo.del} con su cantidad y descuento. La lupa muestra lo agregado; después abre el resumen para guardar.`} title={`Artículos ${tipo.del}`} onBack={salir} />
 
       <FlatList
         ref={listaRef}
@@ -819,7 +912,7 @@ export default function PedidoArticulosView({
                       montoTexto={monto(calculo.descuento, articulo.moneda)}
                       onChange={cambiar('descuento')}
                     />
-                    <Dato label="Bonificación" value={formatCantidad(BONIFICACION)} />
+                    <Dato label="Bonificación" value={formatCantidad(unidadesRegalo)} />
                     <Dato
                       label={`Adicional (${formatPorcentaje(articulo.impuesto1 + articulo.impuesto2)})`}
                       value={monto(calculo.adicional, articulo.moneda)}
@@ -831,6 +924,7 @@ export default function PedidoArticulosView({
                       calculo={calculo}
                       vigentes={vigentesArticulo}
                       promos={promosArticulo}
+                      bonificaciones={bonificacionesArticulo}
                       empAlm={articulo.empAlm}
                     />
                   ) : null}

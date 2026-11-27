@@ -113,7 +113,7 @@ export default function CalendarioScreen({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Calendario" onBack={onBack} />
+      <CenteredHeader info={'Vencimientos de los documentos por cobrar. Los días en rojo tienen documentos vencidos y los ámbar por vencer; toca un día para ver sus documentos.'} title="Calendario" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.segment}>

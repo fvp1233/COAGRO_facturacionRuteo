@@ -170,7 +170,7 @@ export default function PromocionalesView({ cliente, ruta, onBack }) {
   return (
     <View style={[h.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Promocionales" onBack={onBack} />
+      <CenteredHeader info={'Solicitudes de material promocional del cliente. Usa Nueva solicitud para pedir uno; las que no se han enviado se pueden eliminar.'} title="Promocionales" onBack={onBack} />
 
       <ScrollView contentContainerStyle={h.content}>
         <ClienteHistorialCard cliente={cliente} ruta={ruta} descargado={descargado} />

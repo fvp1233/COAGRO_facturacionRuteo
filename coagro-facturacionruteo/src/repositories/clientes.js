@@ -78,32 +78,21 @@ export async function getClienteConsulta(cliente, ruta) {
             COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AS PAIS_DIVISION,
             cc.DIVISION_GEOGRAFICA1, d1.NOMBRE AS NOM_DIV1,
             cc.DIVISION_GEOGRAFICA2, d2.NOMBRE AS NOM_DIV2,
-            cc.DIVISION_GEOGRAFICA3, m.NOMBRE AS NOM_DIV3,
-            -- Municipio de la reforma que corresponde al distrito (DIVISION_GEOGRAFICA2), para los
-            -- clientes que aún no lo tienen guardado en DIVISION_GEOGRAFICA3.
-            ms.MUNICIPIO AS MUN_SUGERIDO, ms.NOMBRE AS NOM_MUN_SUGERIDO
+            cc.DIVISION_GEOGRAFICA3, d3.NOMBRE AS NOM_DIV3
        FROM CLIENTE c
        LEFT JOIN CLIENTE_CIA cc ON cc.COD_CLT = c.COD_CLT
        LEFT JOIN alFAC_PAIS p ON p.COD_PAIS = cc.COD_PAIS
        -- País de las divisiones: COD_PAIS no siempre es un país (trae códigos de vendedor como 'VRR1');
-       -- si no tiene departamentos se usa 'SAL' (utils/divisiones, paisGeografico).
+       -- si no tiene departamentos se usa 'ESA' (utils/divisiones, paisGeografico).
        LEFT JOIN (SELECT DISTINCT PAIS FROM DIVISION_GEOGRAFICA1) pd ON pd.PAIS = cc.COD_PAIS
        LEFT JOIN DIVISION_GEOGRAFICA1 d1
               ON d1.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND d1.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
        LEFT JOIN DIVISION_GEOGRAFICA2 d2
               ON d2.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND d2.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
              AND d2.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
-       -- Opción B (migración v34): DIVISION_GEOGRAFICA3 guarda el municipio de la reforma.
-       LEFT JOIN FR_MUNICIPIO m
-              ON m.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND m.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
-             AND m.MUNICIPIO = cc.DIVISION_GEOGRAFICA3
-       LEFT JOIN (SELECT f.PAIS, f.DIVISION_GEOGRAFICA1, f.DIVISION_GEOGRAFICA2, f.MUNICIPIO, fm.NOMBRE
-                    FROM FR_DISTRITO f
-                    JOIN FR_MUNICIPIO fm
-                      ON fm.PAIS = f.PAIS AND fm.DIVISION_GEOGRAFICA1 = f.DIVISION_GEOGRAFICA1
-                     AND fm.MUNICIPIO = f.MUNICIPIO) ms
-              ON ms.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND ms.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
-             AND ms.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2
+       LEFT JOIN DIVISION_GEOGRAFICA3 d3
+              ON d3.PAIS = COALESCE(pd.PAIS, '${PAIS_DIVISION_DEFECTO}') AND d3.DIVISION_GEOGRAFICA1 = cc.DIVISION_GEOGRAFICA1
+             AND d3.DIVISION_GEOGRAFICA2 = cc.DIVISION_GEOGRAFICA2 AND d3.DIVISION_GEOGRAFICA3 = cc.DIVISION_GEOGRAFICA3
        LEFT JOIN ACTIVIDAD_COMERCIAL a ON TRIM(a.codigo) = TRIM(cc.CODIGO)
        LEFT JOIN (SELECT COD_TIP_CL, MIN(DES_TIP_CL) AS DES_TIP_CL FROM alFAC_TIP_CLT GROUP BY COD_TIP_CL) t
               ON t.COD_TIP_CL = cc.COD_TIP_CL
@@ -150,9 +139,8 @@ export async function getClienteConsulta(cliente, ruta) {
     actividadCodigo: c.COD_ACTIVIDAD,
     actividadDescripcion: c.DES_ACTIVIDAD,
     // Valores propios de CLIENTE_CIA (sin el respaldo de CODIGO / catálogo): los que se editan.
-    // Divisiones geográficas dentro del país del cliente (opción B, migración v34):
-    // division1 = departamento, division2 = distrito (código del ERP), division3 = municipio de la
-    // reforma. municipioSugerido: el que corresponde al distrito según FR_DISTRITO (null si no se sabe).
+    // Divisiones geográficas dentro del país del cliente (catálogos de Softland, migración v38):
+    // division1 = departamento, division2 = municipio, division3 = distrito.
     // Etiqueta del departamento del país (alFAC_PAIS) si la tiene.
     pais: c.COD_PAIS,
     // País con que se filtran y unen las divisiones (paisGeografico); `pais` sigue siendo COD_PAIS.
@@ -164,7 +152,6 @@ export async function getClienteConsulta(cliente, ruta) {
     nombreDivision2: c.NOM_DIV2,
     division3: c.DIVISION_GEOGRAFICA3,
     nombreDivision3: c.NOM_DIV3,
-    municipioSugerido: c.MUN_SUGERIDO ? { codigo: c.MUN_SUGERIDO, nombre: c.NOM_MUN_SUGERIDO } : null,
     actividadCodigoPropio: c.codActividad,
     actividadDescripcionPropia: c.desActividad,
     encargadoCompras: c.nomEncargadoCompras,

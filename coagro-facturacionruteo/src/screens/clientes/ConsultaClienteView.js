@@ -17,7 +17,7 @@ import {
 import { enviarPendientes } from '../../services/enviarDatos';
 import { isNetworkError } from '../../services/api';
 import { formatCantidad, formatMonto, formatPorcentaje } from '../../utils/formato';
-import { departamentosDe, distritosDe, municipioDeDistrito, municipiosDe } from '../../utils/divisiones';
+import { departamentosDe, distritosDe, municipiosDe } from '../../utils/divisiones';
 import { colors, radius, spacing } from '../../theme';
 
 const NO_DISPONIBLE = 'No disponible';
@@ -154,18 +154,15 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   // Los datos de CLIENTE_CIA solo se editan si el cliente tiene fila (datos comerciales).
   const esEditable = (campo) => CAMPOS_CLIENTE[campo].tabla !== 'CLIENTE_CIA' || Boolean(datos?.tieneDatosComerciales);
 
-  // Divisiones geográficas en cascada (opción B, utils/divisiones): departamentos del país de las
-  // divisiones (paisDivision: COD_PAIS puede ser un vendedor), municipios del departamento y distritos
-  // del municipio (sin municipio elegido, todos los del departamento).
+  // Divisiones geográficas en cascada (utils/divisiones): departamentos del país de las divisiones
+  // (paisDivision: COD_PAIS puede ser un vendedor), municipios del departamento y distritos del
+  // departamento + municipio.
   const listaDivision = (campo, valores) => {
     const pais = datos?.paisDivision;
     if (campo === 'DIVISION_GEOGRAFICA1') return departamentosDe(catalogos.departamentos, pais);
-    if (campo === 'DIVISION_GEOGRAFICA3') return municipiosDe(catalogos.municipios, pais, valores.DIVISION_GEOGRAFICA1);
-    return distritosDe(catalogos.distritos, pais, valores.DIVISION_GEOGRAFICA1, valores.DIVISION_GEOGRAFICA3);
+    if (campo === 'DIVISION_GEOGRAFICA2') return municipiosDe(catalogos.municipios, pais, valores.DIVISION_GEOGRAFICA1);
+    return distritosDe(catalogos.distritos, pais, valores.DIVISION_GEOGRAFICA1, valores.DIVISION_GEOGRAFICA2);
   };
-  // Municipio que FR_DISTRITO asigna al distrito elegido (null si no lo tiene).
-  const municipioDe = (valores) =>
-    municipioDeDistrito(catalogos.distritos, datos?.paisDivision, valores.DIVISION_GEOGRAFICA1, valores.DIVISION_GEOGRAFICA2);
 
   // Opciones de un campo 'opciones'. Si el valor del cliente no está en el catálogo se agrega solo
   // con su código para no perderlo.
@@ -185,13 +182,7 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
 
   const empezarEdicion = () => {
     const b = armarBorrador(datos);
-    // Cliente sin municipio de la reforma: se propone el de su distrito (se guarda como un cambio más,
-    // y sale en la confirmación).
-    setBorrador(
-      !b.DIVISION_GEOGRAFICA3 && datos.municipioSugerido
-        ? { ...b, DIVISION_GEOGRAFICA3: datos.municipioSugerido.codigo }
-        : b
-    );
+    setBorrador(b);
     setInicial(b);
     setErrores({});
     setAviso(null);
@@ -204,8 +195,6 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   };
 
   // Al cambiar un campo se limpian los que dependen de él (departamento -> municipio -> distrito).
-  // Al elegir un distrito, el municipio se llena con el que le asigna FR_DISTRITO (si está vacío o
-  // no coincide).
   const cambiar = (campo, valor) => {
     setBorrador((b) => {
       const nuevo = { ...b, [campo]: valor };
@@ -215,10 +204,6 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
         if (!hijo || b[campo] === valor) break;
         nuevo[hijo] = null;
         padre = hijo;
-      }
-      if (campo === 'DIVISION_GEOGRAFICA2') {
-        const municipio = municipioDe(nuevo);
-        if (municipio) nuevo.DIVISION_GEOGRAFICA3 = municipio;
       }
       return nuevo;
     });
@@ -264,9 +249,7 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
   };
 
   const guardar = () => {
-    // Si hay distrito y FR_DISTRITO le asigna municipio, se manda ese municipio.
-    const municipio = municipioDe(borrador);
-    const final = municipio ? { ...borrador, DIVISION_GEOGRAFICA3: municipio } : borrador;
+    const final = borrador;
     // Si cambió cualquiera de los tres niveles, se validan y guardan los tres (CAMPOS_DIVISION).
     const divisionCambio = CAMPOS_DIVISION.some((c) => esEditable(c) && !iguales(final[c], inicial[c]));
     const enConjunto = (campo) => divisionCambio && CAMPOS_DIVISION.includes(campo);
@@ -442,21 +425,16 @@ export default function ConsultaClienteView({ cliente, ruta, onBack }) {
                 codigoYNombre(datos.division1, datos.nombreDivision1),
                 'DIVISION_GEOGRAFICA1'
               )}
-              {/* Opción B: municipio de la reforma (DIVISION_GEOGRAFICA3) y distrito (DIVISION_GEOGRAFICA2,
-                  el código del ERP). Sin municipio guardado se muestra el que corresponde al distrito. */}
-              {dato(
-                etiquetaCampo('DIVISION_GEOGRAFICA3'),
-                datos.division3
-                  ? codigoYNombre(datos.division3, datos.nombreDivision3)
-                  : datos.municipioSugerido
-                    ? `${codigoYNombre(datos.municipioSugerido.codigo, datos.municipioSugerido.nombre)} (según el distrito)`
-                    : null,
-                'DIVISION_GEOGRAFICA3'
-              )}
+              {/* Municipio (DIVISION_GEOGRAFICA2) y distrito (DIVISION_GEOGRAFICA3). */}
               {dato(
                 etiquetaCampo('DIVISION_GEOGRAFICA2'),
                 codigoYNombre(datos.division2, datos.nombreDivision2),
                 'DIVISION_GEOGRAFICA2'
+              )}
+              {dato(
+                etiquetaCampo('DIVISION_GEOGRAFICA3'),
+                codigoYNombre(datos.division3, datos.nombreDivision3),
+                'DIVISION_GEOGRAFICA3'
               )}
             </View>
 

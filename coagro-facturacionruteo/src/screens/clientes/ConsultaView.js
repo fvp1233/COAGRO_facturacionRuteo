@@ -17,7 +17,7 @@ export default function ConsultaView({ onBack, onOpenConsulta }) {
 
   return (
     <View style={styles.root}>
-      <CenteredHeader title="Opciones de Consulta" onBack={onBack} />
+      <CenteredHeader info={'Elige qué información del cliente quieres consultar.'} title="Opciones de Consulta" onBack={onBack} />
 
       <View style={styles.content}>
         <View style={styles.metaRow}>

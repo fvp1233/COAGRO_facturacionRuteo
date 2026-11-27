@@ -172,7 +172,7 @@ export default function CobradoVendidoReporteView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Cobrado y Vendido" onBack={onBack} />
+      <CenteredHeader info={'Lo vendido (pedidos y cotizaciones aprobadas) y lo cobrado (recibos) hoy en este equipo. Toca un documento para imprimirlo.'} title="Cobrado y Vendido" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.dia}>

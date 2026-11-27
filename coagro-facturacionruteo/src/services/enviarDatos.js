@@ -4,10 +4,21 @@ import { toSqlLocal } from '../repositories/visitas';
 import { leerDepositosPendientes, marcarPagosEnviados } from '../repositories/depositos';
 import { PATHS, TIMEOUT_ENVIO_MS } from '../config/api';
 import { CAMPOS_CLIENTE } from '../repositories/clienteCambios';
+import {
+  adoptarConsecutivoServidor,
+  leerNotasCreditoPendientes,
+  renumerarNotaCredito,
+} from '../repositories/notasCredito';
+import {
+  adoptarConsecutivoInventario,
+  leerInventariosPendientes,
+  renumerarInventario,
+} from '../repositories/inventarios';
 
 // Envío al servidor (POST /fr/sync/enviar) de lo registrado en el equipo: ubicaciones de clientes,
-// visitas (con su GPS), pedidos (encabezado + líneas), aprobaciones de cotizaciones, cambios a los
-// datos de clientes (Consultar > Cliente) y el consecutivo de pedidos de cada ruta.
+// visitas (con su GPS), pedidos (encabezado + líneas), aprobaciones de cotizaciones, notas de crédito,
+// inventarios de clientes, cambios a los datos de clientes (Consultar > Cliente) y los consecutivos de
+// cada ruta.
 // "Cargar datos" borra las tablas locales y las vuelve a llenar, así que esto va ANTES de cargar.
 // El servidor no duplica: reenviar lo mismo es seguro.
 
@@ -17,9 +28,10 @@ const corta = (v, max) => (v == null ? null : String(v).slice(0, max));
 const fechaSql = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v} 00:00:00` : v ?? null);
 const numero = (v) => (v == null || v === '' ? null : Number(v));
 
-// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, depositos,
-// promocionales, cambiosCliente, consecutivos, total }).
-// Depósitos = alCXC_ENC_DEP sin enviar (el efectivo y los cheques aún sin depositar no cuentan).
+// Cantidad de registros pendientes de enviar ({ ubicaciones, visitas, pedidos, aprobaciones, notasCredito,
+// depositos, promocionales, cambiosCliente, consecutivos, total }).
+// Depósitos = recibos con alguna parte sin enviar (alCXC_ENC_DEP; un recibo repartido en varias
+// cuentas cuenta una vez).
 export async function contarPendientes() {
   const db = await getDatabase();
   const cuenta = async (tabla) => (await db.getFirstAsync(`SELECT COUNT(*) AS n FROM ${tabla} WHERE ENVIADO = 0`))?.n ?? 0;
@@ -27,7 +39,9 @@ export async function contarPendientes() {
   const visitas = await cuenta('VISITA');
   const pedidos = await cuenta('alFAC_ENC_PED');
   const aprobaciones = await cuenta('COTIZACION_APROBACION');
-  const depositos = (await leerDepositosPendientes(db)).length;
+  const notasCredito = await cuenta('alFAC_ENC_DEV');
+  const inventarios = await cuenta('alFAC_ENC_INV');
+  const depositos = new Set((await leerDepositosPendientes(db)).map((d) => d.encabezado.NUM_DEP)).size;
   const promocionales = await cuenta('PROMOCIONAL');
   const cambiosCliente = await cuenta('CLIENTE_CAMBIO');
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
@@ -37,11 +51,23 @@ export async function contarPendientes() {
     visitas,
     pedidos,
     aprobaciones,
+    notasCredito,
+    inventarios,
     depositos,
     promocionales,
     cambiosCliente,
     consecutivos,
-    total: ubicaciones + visitas + pedidos + aprobaciones + depositos + promocionales + cambiosCliente + consecutivos,
+    total:
+      ubicaciones +
+      visitas +
+      pedidos +
+      aprobaciones +
+      notasCredito +
+      inventarios +
+      depositos +
+      promocionales +
+      cambiosCliente +
+      consecutivos,
   };
 }
 
@@ -162,14 +188,22 @@ async function leerPendientes(db) {
     FEC_DES: fechaSql(a.FEC_DES),
   }));
 
-  // Consecutivos SIGUIENTES de cada ruta (ya incrementados en el equipo): PEDIDO de pedidos y FACTURA
-  // de cotizaciones. Solo si se guardaron documentos desde el último envío correcto.
+  // Notas de crédito (alFAC_ENC_DEV + alFAC_DET_DEV) creadas en el equipo.
+  const notasCredito = await leerNotasCreditoPendientes(db, fechaSql);
+
+  // Inventarios de clientes (alFAC_ENC_INV + alFAC_DET_INV) hechos en el equipo.
+  const inventarios = await leerInventariosPendientes(db, fechaSql);
+
+  // Consecutivos SIGUIENTES de cada ruta (ya incrementados en el equipo): PEDIDO de pedidos, FACTURA
+  // de cotizaciones, RECIBO de cobros, NOTACREDITO de notas de crédito e INVENTARIO de inventarios.
+  // Solo si se guardaron documentos desde el último envío correcto.
   const flag = await db.getFirstAsync("SELECT value FROM app_meta WHERE key = 'consecutivos_pendientes'");
   const consecutivos =
     flag?.value === '1'
       ? await db.getAllAsync(
-          `SELECT RUTA, PEDIDO, FACTURA, RECIBO FROM RUTA_CONSECUT_RT
-            WHERE COALESCE(PEDIDO, '') <> '' OR COALESCE(FACTURA, '') <> '' OR COALESCE(RECIBO, '') <> ''`
+          `SELECT RUTA, PEDIDO, FACTURA, RECIBO, NOTACREDITO, INVENTARIO FROM RUTA_CONSECUT_RT
+            WHERE COALESCE(PEDIDO, '') <> '' OR COALESCE(FACTURA, '') <> '' OR COALESCE(RECIBO, '') <> ''
+               OR COALESCE(NOTACREDITO, '') <> '' OR COALESCE(INVENTARIO, '') <> ''`
         )
       : [];
 
@@ -220,26 +254,42 @@ async function leerPendientes(db) {
     FECHA: fechaSql(c.FECHA),
   }));
 
-  return { ubicaciones, visitas, pedidos, aprobaciones, depositos, promocionales, cambiosCliente, consecutivos };
+  return {
+    ubicaciones,
+    visitas,
+    pedidos,
+    aprobaciones,
+    notasCredito,
+    inventarios,
+    depositos,
+    promocionales,
+    cambiosCliente,
+    consecutivos,
+  };
 }
 
 // Envía todo lo pendiente y marca como enviado lo que el servidor guardó (ok, o duplicado de un envío
 // anterior). Lo que falla queda pendiente con su ERROR_ENVIO.
 // Devuelve { enviados, errores: [{ tipo, registro, error }] }; errores vacío = todo quedó en el servidor.
 // Lanza ApiError si el request entero falla (sin red, timeout, 5xx, success: false): no se marca nada.
-// solo: nombre de un arreglo (p. ej. 'cambiosCliente') para enviar únicamente eso; el resto va vacío
-// y queda pendiente para Datos > Enviar datos.
-export async function enviarPendientes({ solo } = {}) {
+// solo: nombre de un arreglo (p. ej. 'cambiosCliente'), o lista de nombres, para enviar únicamente eso;
+// el resto va vacío y queda pendiente para Datos > Enviar datos.
+// Una nota de crédito o un inventario con conflicto de número (otro ya lo usa en el servidor) se
+// renumera con el consecutivo y se reenvía solo una vez (reintento).
+export async function enviarPendientes({ solo, reintento = false } = {}) {
   const db = await getDatabase();
   const datos = await leerPendientes(db);
   if (solo) {
-    for (const k of Object.keys(datos)) if (k !== solo) datos[k] = [];
+    const permitidos = [].concat(solo);
+    for (const k of Object.keys(datos)) if (!permitidos.includes(k)) datos[k] = [];
   }
   const total =
     datos.ubicaciones.length +
     datos.visitas.length +
     datos.pedidos.length +
     datos.aprobaciones.length +
+    datos.notasCredito.length +
+    datos.inventarios.length +
     datos.depositos.length +
     datos.promocionales.length +
     datos.cambiosCliente.length +
@@ -254,6 +304,8 @@ export async function enviarPendientes({ solo } = {}) {
   // sigue funcionando mientras no haya solicitudes nuevas).
   if (datos.promocionales.length) claves.push('promocionales');
   if (datos.cambiosCliente.length) claves.push('cambiosCliente');
+  if (datos.notasCredito.length) claves.push('notasCredito');
+  if (datos.inventarios.length) claves.push('inventarios');
   if (!r || !claves.every((k) => Array.isArray(r[k]))) {
     throw new ApiError('La respuesta del servidor al envío no tiene el formato esperado.');
   }
@@ -261,6 +313,9 @@ export async function enviarPendientes({ solo } = {}) {
   const ahora = toSqlLocal(new Date());
   const errores = [];
   let enviados = 0;
+  // Notas de crédito e inventarios renumerados por conflicto ({ tipo, registro, error }), para avisar
+  // si no se reenvían.
+  const renumeradas = [];
 
   // Resultado por registro, en el mismo orden en que se mandó.
   const procesar = async (tipo, enviadosTipo, resultados, describir, marcar) => {
@@ -310,18 +365,96 @@ export async function enviarPendientes({ solo } = {}) {
       (a) => `Cotización ${a.NUM_PED}`,
       marcarEn('COTIZACION_APROBACION', 'COD_ZON = ? AND NUM_PED = ?', (a) => [a.COD_ZON, a.NUM_PED])
     );
-    // Depósito ok (o duplicado de un envío anterior): queda enviado con su CONSEC_DEP del servidor.
+    // Nota de crédito ok (o duplicado de un reenvío: el servidor no la sobrescribe) -> enviada.
+    // conflicto -> su número ya lo usa otra NC: se renumera con el consecutivo y se reenvía.
+    // error -> queda pendiente con el mensaje.
+    // actualNotaCredito: consecutivo del servidor cuando ignoró el del equipo (el servidor va adelante).
+    const actualServidor = (ruta) =>
+      (r.consecutivos ?? []).find((c) => c?.RUTA === ruta && c?.ignoradoNotaCredito)?.actualNotaCredito ?? null;
+    for (const [i, n] of datos.notasCredito.entries()) {
+      const res = (r.notasCredito ?? [])[i];
+      const { COD_CIA, COD_ZON, NUM_DEV, COD_CLT } = n.encabezado;
+      const llave = [COD_CIA ?? '', COD_ZON, NUM_DEV];
+      const where = 'COD_CIA = ? AND COD_ZON = ? AND NUM_DEV = ?';
+      const registro = `${NUM_DEV} (cliente ${COD_CLT})`;
+      if (res?.ok) {
+        await db.runAsync(
+          `UPDATE alFAC_ENC_DEV SET ENVIADO = 1, FECHA_ENVIO = ?, ERROR_ENVIO = NULL, DOC_PRO = COALESCE(DOC_PRO, 'N') WHERE ${where}`,
+          [ahora, ...llave]
+        );
+        enviados += 1;
+      } else if (res?.conflicto) {
+        const nuevo = await renumerarNotaCredito(db, n.encabezado, actualServidor(COD_ZON));
+        renumeradas.push({
+          tipo: 'Nota de crédito',
+          registro,
+          error: `${res.error || 'El número ya está usado en el servidor'}. Se renumeró a ${nuevo}; vuelve a enviar.`,
+        });
+      } else {
+        const error = res?.error || 'El servidor no devolvió resultado para este registro.';
+        await db.runAsync(`UPDATE alFAC_ENC_DEV SET ERROR_ENVIO = ? WHERE ${where}`, [error, ...llave]);
+        errores.push({ tipo: 'Nota de crédito', registro, error });
+      }
+    }
+
+    // Inventario ok (o ok + duplicado: ya estaba de un reenvío con el mismo cliente y HOR_INI) -> enviado.
+    // conflicto -> ese NUM_INV ya existe en la ruta: se renumera con el consecutivo y se reenvía.
+    // error -> queda pendiente con el mensaje.
+    const actualInventario = (ruta) =>
+      (r.consecutivos ?? []).find((c) => c?.RUTA === ruta && c?.ignoradoInventario)?.actualInventario ?? null;
+    for (const [i, inv] of datos.inventarios.entries()) {
+      const res = (r.inventarios ?? [])[i];
+      const { COD_CIA, COD_ZON, NUM_INV, COD_CLT } = inv.encabezado;
+      const llave = [COD_CIA ?? '', COD_ZON, NUM_INV];
+      const where = 'COD_CIA = ? AND COD_ZON = ? AND NUM_INV = ?';
+      const registro = `${NUM_INV} (cliente ${COD_CLT})`;
+      if (res?.ok) {
+        await db.runAsync(
+          `UPDATE alFAC_ENC_INV SET ENVIADO = 1, FECHA_ENVIO = ?, ERROR_ENVIO = NULL, DOC_PRO = COALESCE(DOC_PRO, 'N') WHERE ${where}`,
+          [ahora, ...llave]
+        );
+        enviados += 1;
+      } else if (res?.conflicto) {
+        const nuevo = await renumerarInventario(db, inv.encabezado, actualInventario(COD_ZON));
+        renumeradas.push({
+          tipo: 'Inventario',
+          registro,
+          error: `${res.error || 'El número ya está usado en el servidor'}. Se renumeró a ${nuevo}; vuelve a enviar.`,
+        });
+      } else {
+        const error = res?.error || 'El servidor no devolvió resultado para este registro.';
+        await db.runAsync(`UPDATE alFAC_ENC_INV SET ERROR_ENVIO = ? WHERE ${where}`, [error, ...llave]);
+        errores.push({ tipo: 'Inventario', registro, error });
+      }
+    }
+
+    // Depósito = una parte del recibo (una por cuenta, mismo NUM_DEP). El servidor responde una
+    // entrada por parte; se empareja por CTA_BCO + NUM_DEP (y por posición solo si la respuesta no trae
+    // esos datos). Parte ok (o duplicado de un envío anterior): queda enviada con su CONSEC_DEP. Una
+    // parte con error queda pendiente con su mensaje; el recibo cuenta como enviado (marcarPagosEnviados)
+    // solo cuando TODAS sus partes lo están.
+    const mismoTexto = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+    const resultadoDeposito = (d, i) => {
+      const lista = r.depositos ?? [];
+      const porLlave = lista.find(
+        (x) => mismoTexto(x?.CTA_BCO, d.encabezado.CTA_BCO) && mismoTexto(x?.NUM_DEP, d.encabezado.NUM_DEP)
+      );
+      if (porLlave) return porLlave;
+      const enPosicion = lista[i];
+      return enPosicion && enPosicion.CTA_BCO == null && enPosicion.NUM_DEP == null ? enPosicion : undefined;
+    };
+    const resultadosDeposito = datos.depositos.map(resultadoDeposito);
     await procesar(
       'Depósito',
       datos.depositos,
-      r.depositos ?? [],
+      resultadosDeposito,
       (d) => `Recibo ${d.encabezado.NUM_DEP} (cuenta ${d.encabezado.CTA_BCO})`,
       (d, error) => {
         const { COD_CIA, COD_BCO, CTA_BCO, NUM_DEP } = d.encabezado;
         const llave = [COD_CIA, COD_BCO, CTA_BCO, NUM_DEP];
         const where = 'COD_CIA = ? AND COD_BCO = ? AND CTA_BCO = ? AND NUM_DEP = ?';
         if (error) return db.runAsync(`UPDATE alCXC_ENC_DEP SET ERROR_ENVIO = ? WHERE ${where}`, [error, ...llave]);
-        const res = (r.depositos ?? []).find((x) => x?.CTA_BCO === CTA_BCO && String(x?.NUM_DEP) === NUM_DEP);
+        const res = resultadosDeposito[datos.depositos.indexOf(d)];
         return db.runAsync(
           `UPDATE alCXC_ENC_DEP SET ENVIADO = 1, FECHA_ENVIO = ?, ERROR_ENVIO = NULL, CONSEC_DEP = ? WHERE ${where}`,
           [ahora, res?.CONSEC_DEP ?? null, ...llave]
@@ -365,15 +498,39 @@ export async function enviarPendientes({ solo } = {}) {
       'Consecutivo',
       datos.consecutivos,
       r.consecutivos,
-      (c) => `Ruta ${c.RUTA} (${[c.PEDIDO, c.FACTURA, c.RECIBO].filter(Boolean).join(', ')})`,
+      (c) => `Ruta ${c.RUTA} (${[c.PEDIDO, c.FACTURA, c.RECIBO, c.NOTACREDITO, c.INVENTARIO].filter(Boolean).join(', ')})`,
       async (c, error) => {
         if (error) consecutivosOk = false;
       }
     );
+    // Si el servidor ya iba más adelante en NOTACREDITO o INVENTARIO, el equipo continúa desde su número.
+    for (const c of r.consecutivos ?? []) {
+      if (c?.ok && c.ignoradoNotaCredito && c.actualNotaCredito && c.RUTA) {
+        await adoptarConsecutivoServidor(db, c.RUTA, c.actualNotaCredito);
+      }
+      if (c?.ok && c.ignoradoInventario && c.actualInventario && c.RUTA) {
+        await adoptarConsecutivoInventario(db, c.RUTA, c.actualInventario);
+      }
+    }
     if (datos.consecutivos.length && consecutivosOk) {
       await db.runAsync("DELETE FROM app_meta WHERE key = 'consecutivos_pendientes'");
     }
+    // La renumeración deja otra vez el consecutivo por enviar.
+    if (renumeradas.length) {
+      await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('consecutivos_pendientes', '1')");
+    }
   });
+
+  // Reenvío inmediato de las NC e inventarios renumerados (con su consecutivo). Si falla, quedan pendientes.
+  if (renumeradas.length) {
+    if (reintento) return { enviados, errores: [...errores, ...renumeradas] };
+    try {
+      const otra = await enviarPendientes({ solo: ['notasCredito', 'inventarios', 'consecutivos'], reintento: true });
+      return { enviados: enviados + otra.enviados, errores: [...errores, ...otra.errores] };
+    } catch {
+      return { enviados, errores: [...errores, ...renumeradas] };
+    }
+  }
 
   return { enviados, errores };
 }

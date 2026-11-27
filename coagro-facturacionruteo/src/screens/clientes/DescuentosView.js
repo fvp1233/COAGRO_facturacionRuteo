@@ -178,7 +178,7 @@ export default function DescuentosView({
   return (
     <View style={[h.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Descuentos y promociones" onBack={onBack} />
+      <CenteredHeader info={'Descuentos del cliente por artículo y promociones vigentes. Toca un descuento para hacer un pedido o una cotización con ese artículo.'} title="Descuentos y promociones" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={h.content} keyboardShouldPersistTaps="handled">
         <ClienteHistorialCard cliente={cliente} ruta={ruta} descargado={descargado} />

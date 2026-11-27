@@ -8,13 +8,7 @@ import CenteredHeader from '../../components/ui/CenteredHeader';
 import SelectField from '../../components/ui/SelectField';
 import Checkbox from '../../components/ui/Checkbox';
 import { armarEncabezado, faltantesEncabezado, getDatosPedido, TIPOS_PEDIDO } from '../../repositories/pedidos';
-import {
-  departamentosDe,
-  distritosDe,
-  municipioDeDistrito,
-  municipiosDe,
-  paisGeografico,
-} from '../../utils/divisiones';
+import { departamentosDe, distritosDe, municipiosDe, paisGeografico } from '../../utils/divisiones';
 import { colors, radius, spacing } from '../../theme';
 
 const ACCENT = colors.primary;
@@ -28,17 +22,6 @@ const etiqueta = (o) => (o.descripcion && o.descripcion !== o.codigo ? `${o.codi
 function conValorCliente(opciones, codigo) {
   if (!codigo || opciones.some((o) => o.codigo === codigo)) return opciones;
   return [{ codigo, descripcion: null }, ...opciones];
-}
-
-// Municipio de la reforma con que se abre el pedido: el guardado del cliente (DIVISION_GEOGRAFICA3) o,
-// si no tiene, el que FR_DISTRITO asigna a su distrito. null si no se sabe.
-function municipioInicial(datos) {
-  const c = datos?.cliente;
-  if (!c) return null;
-  return (
-    c.division3 ||
-    municipioDeDistrito(datos.distritos, paisGeografico(c.pais, datos.divisiones1), c.division1, c.division2)
-  );
 }
 
 // Selector sobre opciones { codigo, descripcion }: muestra la etiqueta y devuelve el código.
@@ -64,11 +47,11 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [pais, setPais] = useState(null);
-  // Opción B (utils/divisiones): departamento -> municipio de la reforma (solo para filtrar) ->
-  // distrito (código del ERP). Al pedido van COD_GEO1 = departamento y COD_GEO2 = distrito.
+  // Divisiones (utils/divisiones): departamento -> municipio -> distrito. Al pedido van
+  // COD_GEO1 = departamento y COD_GEO2 = municipio (el distrito no tiene columna en alFAC_ENC_PED).
   const [division1, setDivision1] = useState(null);
-  const [municipio, setMunicipio] = useState(null);
   const [division2, setDivision2] = useState(null);
+  const [division3, setDivision3] = useState(null);
   const [condicionPago, setCondicionPago] = useState(null);
   const [nivelPrecio, setNivelPrecio] = useState(null);
   const [subtipo, setSubtipo] = useState(null);
@@ -92,8 +75,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
         setPais(c.pais);
         setDivision1(c.division1);
         setDivision2(c.division2);
-        // Sin municipio guardado se preselecciona el de su distrito (FR_DISTRITO).
-        setMunicipio(municipioInicial(d));
+        setDivision3(c.division3);
         setCondicionPago(c.condicionPago);
         setNivelPrecio(c.nivelPrecio);
         setSubtipo(c.subtipo);
@@ -110,7 +92,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
     };
   }, [cliente.codigo, ruta]);
 
-  // País de las divisiones: COD_PAIS puede ser un vendedor ('VRR1'); entonces 'SAL'. El COD_PAIS
+  // País de las divisiones: COD_PAIS puede ser un vendedor ('VRR1'); entonces 'ESA'. El COD_PAIS
   // que va en el pedido no cambia.
   const paisDiv = datos ? paisGeografico(pais, datos.divisiones1) : null;
 
@@ -120,6 +102,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
     const paisCliente = paisGeografico(c.pais, datos.divisiones1);
     // Los valores del cliente solo se conservan mientras sigan en su país / nivel superior.
     const mismoDepto = paisDiv === paisCliente && division1 === c.division1;
+    const mismoMunicipio = mismoDepto && division2 === c.division2;
     return {
       paises: conValorCliente(datos.paises, c.pais),
       divisiones1: conValorCliente(
@@ -128,55 +111,48 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
       ),
       municipios: conValorCliente(
         municipiosDe(datos.municipios, paisDiv, division1),
-        mismoDepto ? c.division3 : null
+        mismoDepto ? c.division2 : null
       ),
       distritos: conValorCliente(
-        distritosDe(datos.distritos, paisDiv, division1, municipio),
-        mismoDepto && (!municipio || municipio === municipioInicial(datos)) ? c.division2 : null
+        distritosDe(datos.distritos, paisDiv, division1, division2),
+        mismoMunicipio ? c.division3 : null
       ),
       condiciones: conValorCliente(datos.condiciones, c.condicionPago),
       niveles: conValorCliente(datos.niveles, c.nivelPrecio),
       subtipos: conValorCliente(datos.subtipos, c.subtipo),
       actividades: conValorCliente(datos.actividades, c.actividadComercial),
     };
-  }, [datos, paisDiv, division1, municipio]);
+  }, [datos, paisDiv, division1, division2]);
 
-  // Si el país de las divisiones no cambia (p. ej. de un vendedor a otro, los dos 'SAL'), se conservan.
+  // Si el país de las divisiones no cambia (p. ej. de un vendedor a otro, los dos 'ESA'), se conservan.
   const cambiarPais = (codigo) => {
     if (codigo === pais) return;
     setPais(codigo);
     if (paisGeografico(codigo, datos?.divisiones1) === paisDiv) return;
     setDivision1(null);
-    setMunicipio(null);
     setDivision2(null);
+    setDivision3(null);
   };
 
   const cambiarDivision1 = (codigo) => {
     if (codigo === division1) return;
     setDivision1(codigo);
-    setMunicipio(null);
     setDivision2(null);
+    setDivision3(null);
   };
 
   const cambiarMunicipio = (codigo) => {
-    if (codigo === municipio) return;
-    setMunicipio(codigo);
-    setDivision2(null);
-  };
-
-  // Al elegir un distrito, el municipio se llena con el que le asigna FR_DISTRITO.
-  const cambiarDistrito = (codigo) => {
+    if (codigo === division2) return;
     setDivision2(codigo);
-    const m = municipioDeDistrito(datos?.distritos, paisDiv, division1, codigo);
-    if (m) setMunicipio(m);
+    setDivision3(null);
   };
 
   const continuar = () => {
     const valores = {
       pais,
       division1,
-      municipio,
       division2,
+      division3,
       condicionPago,
       nivelPrecio,
       subtipo,
@@ -196,7 +172,7 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title={tipo.titulo} onBack={onBack} />
+      <CenteredHeader info={`Datos del encabezado ${tipo.del}, llenados con los del cliente. Cámbialos solo si hace falta y continúa para agregar los artículos.`} title={tipo.titulo} onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.clientCard}>
@@ -224,8 +200,8 @@ export default function PedidoView({ cliente, ruta, tipo = TIPOS_PEDIDO.pedido, 
                 valor={division1}
                 onChange={cambiarDivision1}
               />
-              <Selector label="Municipio" opciones={opciones.municipios} valor={municipio} onChange={cambiarMunicipio} />
-              <Selector label="Distrito" opciones={opciones.distritos} valor={division2} onChange={cambiarDistrito} />
+              <Selector label="Municipio" opciones={opciones.municipios} valor={division2} onChange={cambiarMunicipio} />
+              <Selector label="Distrito" opciones={opciones.distritos} valor={division3} onChange={setDivision3} />
             </View>
 
             <View style={styles.card}>

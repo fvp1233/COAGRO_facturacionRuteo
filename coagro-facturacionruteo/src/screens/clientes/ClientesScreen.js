@@ -23,6 +23,10 @@ import CotizacionesView from './CotizacionesView';
 import DescuentosView from './DescuentosView';
 import PromocionalesView from './PromocionalesView';
 import AnularDocumentoView from './AnularDocumentoView';
+import NotaCreditoView from './NotaCreditoView';
+import NotaCreditoCapturaView from './NotaCreditoCapturaView';
+import ConsultaNotasCreditoView from './ConsultaNotasCreditoView';
+import ConsultaInventariosView from './ConsultaInventariosView';
 import { CONSULTAS } from '../../constants/consultas';
 import { registrarVisita } from '../../repositories/visitas';
 import { getUbicacionCliente } from '../../repositories/clientes';
@@ -56,7 +60,8 @@ export default function ClientesScreen({ onBack }) {
   const [registro, setRegistro] = useState(null);
   // Último cliente seleccionado en la tabla ({ cliente, ruta }).
   const [seleccion, setSeleccion] = useState(null);
-  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'cotizacion' | 'descuentos' | 'consultar'); null = menú.
+  // Opción abierta desde las opciones del cliente ('cobros' | 'pedido' | 'cotizacion' | 'descuentos' |
+  // 'notaCredito' | 'consultar'...); null = menú.
   const [opcionActiva, setOpcionActiva] = useState(null);
   // Cobro en curso ({ moneda, tipoPago }) tras continuar desde Cobros; abre la tabla de documentos.
   const [cobro, setCobro] = useState(null);
@@ -79,6 +84,8 @@ export default function ClientesScreen({ onBack }) {
   const [consulta, setConsulta] = useState(null);
   // Consulta abierta desde la pestaña Consulta (lupa) sobre el cliente seleccionado en la tabla.
   const [consultaTab, setConsultaTab] = useState(null);
+  // Notas de crédito: CCF elegido (de getCcfCliente) sobre el que se captura la NC; null = lista de CCF.
+  const [ccfNota, setCcfNota] = useState(null);
 
   // Aviso informativo al validar: el cliente tiene documentos pendientes de cobro (no bloquea nada).
   const avisarDocumentosPendientes = ({ cliente, ruta }) => {
@@ -127,7 +134,7 @@ export default function ClientesScreen({ onBack }) {
           <ConsultaView
             onBack={() => setActiveTab('validar')}
             onOpenConsulta={(opcion) => {
-              if (!['cliente', 'cobros', 'documentos', 'pedidos'].includes(opcion.id)) {
+              if (!['cliente', 'inventario', 'cobros', 'documentos', 'pedidos', 'notas-credito'].includes(opcion.id)) {
                 Alert.alert(opcion.title, 'Próximamente.');
               } else if (!seleccion) {
                 Alert.alert(opcion.title, 'Selecciona un cliente de la tabla primero.');
@@ -375,6 +382,37 @@ export default function ClientesScreen({ onBack }) {
     );
   }
 
+  // Notas de crédito: lista de CCF del cliente y captura sobre el elegido.
+  if (validando && opcionActiva === 'notaCredito' && ccfNota) {
+    return (
+      <NotaCreditoCapturaView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        ccf={ccfNota}
+        onBack={() => setCcfNota(null)}
+        onGuardada={(numero) => {
+          setCcfNota(null);
+          setOpcionActiva(null);
+          Alert.alert(
+            'Nota de crédito guardada',
+            `Se guardó la nota de crédito ${numero} en el equipo. Envíala en Datos > Enviar Datos.`
+          );
+        }}
+      />
+    );
+  }
+
+  if (validando && opcionActiva === 'notaCredito') {
+    return (
+      <NotaCreditoView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        onBack={() => setOpcionActiva(null)}
+        onElegir={setCcfNota}
+      />
+    );
+  }
+
   if (validando && opcionActiva === 'promocionales') {
     return (
       <PromocionalesView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setOpcionActiva(null)} />
@@ -410,6 +448,37 @@ export default function ClientesScreen({ onBack }) {
   if (!validando && activeTab === 'consulta' && consultaTab === 'cliente' && seleccion) {
     return (
       <ConsultaClienteView cliente={seleccion.cliente} ruta={seleccion.ruta} onBack={() => setConsultaTab(null)} />
+    );
+  }
+
+  if (!validando && activeTab === 'consulta' && consultaTab === 'inventario' && seleccion) {
+    return (
+      <ConsultaInventariosView cliente={seleccion.cliente} ruta={seleccion.ruta} onBack={() => setConsultaTab(null)} />
+    );
+  }
+
+  // Menú Consultar > Inventario (cliente validado): los inventarios del cliente y el botón para hacer
+  // uno nuevo. En la pestaña Consulta (sin validar) es solo para ver.
+  if (validando && opcionActiva === 'consultar' && consulta === 'inventario') {
+    return (
+      <ConsultaInventariosView
+        cliente={validando.cliente}
+        ruta={validando.ruta}
+        permiteCapturar
+        onBack={() => setConsulta(null)}
+      />
+    );
+  }
+
+  if (!validando && activeTab === 'consulta' && consultaTab === 'notas-credito' && seleccion) {
+    return (
+      <ConsultaNotasCreditoView cliente={seleccion.cliente} ruta={seleccion.ruta} onBack={() => setConsultaTab(null)} />
+    );
+  }
+
+  if (validando && opcionActiva === 'consultar' && consulta === 'notas-credito') {
+    return (
+      <ConsultaNotasCreditoView cliente={validando.cliente} ruta={validando.ruta} onBack={() => setConsulta(null)} />
     );
   }
 
@@ -468,14 +537,16 @@ export default function ClientesScreen({ onBack }) {
     return (
       <ClienteOpcionesView
         title="Menú Consultar"
+        info="Consulta la información del cliente: su ficha, inventarios, documentos por cobrar, facturas, notas de crédito y pedidos."
         opciones={CONSULTAS}
         columns={2}
         cliente={validando.cliente}
         ruta={validando.ruta}
         onBack={() => setOpcionActiva(null)}
         onOpcion={(opcion) => {
-          if (['cobros', 'cliente', 'pedidos', 'documentos'].includes(opcion.id)) setConsulta(opcion.id);
-          else Alert.alert(opcion.title, 'Próximamente.');
+          if (['cobros', 'cliente', 'inventario', 'pedidos', 'documentos', 'notas-credito'].includes(opcion.id)) {
+            setConsulta(opcion.id);
+          } else Alert.alert(opcion.title, 'Próximamente.');
         }}
       />
     );
@@ -495,11 +566,13 @@ export default function ClientesScreen({ onBack }) {
               'cotizacion',
               'descuentos',
               'promocionales',
+              'notaCredito',
               'anular',
               'consultar',
             ].includes(opcion.id)
           ) {
             setNuevaCotizacion(false);
+            setCcfNota(null);
             setAtajoDescuento(null);
             setTabDescuentos('descuentos');
             setOpcionActiva(opcion.id);

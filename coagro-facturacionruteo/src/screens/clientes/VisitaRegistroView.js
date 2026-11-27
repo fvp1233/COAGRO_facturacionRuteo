@@ -106,7 +106,7 @@ export default function VisitaRegistroView({ cliente, ruta, inicio, fin, onBack,
     return (
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <StatusBar style="dark" />
-        <CenteredHeader title="Notas de la visita" onBack={() => setEditandoNotas(false)} />
+        <CenteredHeader info={'Escribe un comentario sobre la visita y toca Listo para volver.'} title="Notas de la visita" onBack={() => setEditandoNotas(false)} />
         <View style={styles.notesBody}>
           <TextInput
             style={styles.notesInput}
@@ -129,7 +129,7 @@ export default function VisitaRegistroView({ cliente, ruta, inicio, fin, onBack,
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Registro de visita" onBack={onBack} />
+      <CenteredHeader info={'Registra la visita al cliente: elige el tipo (real o telefónica) y el estado, y agrega notas si quieres. La ubicación se toma del GPS.'} title="Registro de visita" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>

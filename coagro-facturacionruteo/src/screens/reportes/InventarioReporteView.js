@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -11,6 +11,7 @@ import Pagination from '../../components/ui/Pagination';
 import SearchBar from '../../components/ui/SearchBar';
 import { getAvisoInventario, getInventario } from '../../repositories/articulos';
 import { getRutaActiva } from '../../repositories/rutaActiva';
+import { abrirFichaArticulo, actualizarFichasArticulo, getArticulosConFicha } from '../../services/fichaArticulo';
 import { formatCantidad } from '../../utils/formato';
 import { colors, radius, spacing } from '../../theme';
 import { normalizar } from '../../utils/text';
@@ -29,48 +30,72 @@ const PAGE_SIZE = 10;
 // Card de un artículo del inventario: código, descripción, familia y clase a la izquierda;
 // existencia (almacén) y unidades por empaque (detalle) a la derecha. Si tiene lotes en la bodega,
 // el botón de lotes abre el popup. Línea izquierda verde con existencia y roja sin existencia.
-function InventarioCard({ articulo, onVerLotes }) {
+// Al tocarla queda seleccionada; si el artículo tiene ficha técnica aparece el botón "Ver ficha técnica".
+function InventarioCard({ articulo, onVerLotes, seleccionada, onSeleccionar, tieneFicha, abriendoFicha, onVerFicha }) {
   const sinExistencia = articulo.almacen <= 0;
   return (
-    <View style={[styles.card, sinExistencia ? styles.cardSinExistencia : styles.cardConExistencia]}>
-      <View style={styles.cardBody}>
-        <View style={styles.codeChip}>
-          <Text style={styles.codeText}>{articulo.codigo}</Text>
+    <Pressable
+      onPress={() => onSeleccionar(articulo)}
+      style={[
+        styles.card,
+        sinExistencia ? styles.cardSinExistencia : styles.cardConExistencia,
+        seleccionada && styles.cardSeleccionada,
+      ]}
+    >
+      <View style={styles.cardFila}>
+        <View style={styles.cardBody}>
+          <View style={styles.codeChip}>
+            <Text style={styles.codeText}>{articulo.codigo}</Text>
+          </View>
+          <Text style={styles.nombre} numberOfLines={2}>{articulo.descripcion}</Text>
+          <View style={styles.tags}>
+            {articulo.familia ? (
+              <View style={styles.tag}>
+                <Feather name="layers" size={11} color={colors.textMuted} />
+                <Text style={styles.tagText}>{articulo.familia}</Text>
+              </View>
+            ) : null}
+            {articulo.clase ? (
+              <View style={styles.tag}>
+                <Feather name="tag" size={11} color={colors.textMuted} />
+                <Text style={styles.tagText}>{articulo.clase}</Text>
+              </View>
+            ) : null}
+            {articulo.lotes ? (
+              <Pressable
+                onPress={() => onVerLotes(articulo)}
+                hitSlop={6}
+                style={({ pressed }) => [styles.lotes, pressed && styles.pressed]}
+              >
+                <Feather name="layers" size={12} color={colors.primary} />
+                <Text style={styles.lotesText}>
+                  {articulo.lotes} {articulo.lotes === 1 ? 'lote' : 'lotes'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
-        <Text style={styles.nombre} numberOfLines={2}>{articulo.descripcion}</Text>
-        <View style={styles.tags}>
-          {articulo.familia ? (
-            <View style={styles.tag}>
-              <Feather name="layers" size={11} color={colors.textMuted} />
-              <Text style={styles.tagText}>{articulo.familia}</Text>
-            </View>
-          ) : null}
-          {articulo.clase ? (
-            <View style={styles.tag}>
-              <Feather name="tag" size={11} color={colors.textMuted} />
-              <Text style={styles.tagText}>{articulo.clase}</Text>
-            </View>
-          ) : null}
-          {articulo.lotes ? (
-            <Pressable
-              onPress={() => onVerLotes(articulo)}
-              hitSlop={6}
-              style={({ pressed }) => [styles.lotes, pressed && styles.pressed]}
-            >
-              <Feather name="layers" size={12} color={colors.primary} />
-              <Text style={styles.lotesText}>
-                {articulo.lotes} {articulo.lotes === 1 ? 'lote' : 'lotes'}
-              </Text>
-            </Pressable>
-          ) : null}
+        <View style={styles.cardDerecha}>
+          <Text style={styles.stockLabel}>ALMACÉN</Text>
+          <Text style={[styles.stock, sinExistencia && styles.stockCero]}>{formatCantidad(articulo.almacen)}</Text>
+          <Text style={styles.detalle}>Detalle {formatCantidad(articulo.detalle)}</Text>
         </View>
       </View>
-      <View style={styles.cardDerecha}>
-        <Text style={styles.stockLabel}>ALMACÉN</Text>
-        <Text style={[styles.stock, sinExistencia && styles.stockCero]}>{formatCantidad(articulo.almacen)}</Text>
-        <Text style={styles.detalle}>Detalle {formatCantidad(articulo.detalle)}</Text>
-      </View>
-    </View>
+      {seleccionada && tieneFicha ? (
+        <Pressable
+          onPress={() => onVerFicha(articulo)}
+          disabled={abriendoFicha}
+          style={({ pressed }) => [styles.fichaBtn, (pressed || abriendoFicha) && styles.pressed]}
+        >
+          {abriendoFicha ? (
+            <ActivityIndicator size="small" color={colors.onPrimary} />
+          ) : (
+            <Feather name="file-text" size={16} color={colors.onPrimary} />
+          )}
+          <Text style={styles.fichaBtnText}>{abriendoFicha ? 'Abriendo ficha…' : 'Ver ficha técnica'}</Text>
+        </Pressable>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -92,6 +117,43 @@ export default function InventarioReporteView({ onBack }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const scrollRef = useRef(null);
+  // Artículo seleccionado (código) y códigos con ficha técnica (FICHA_ARTICULO).
+  const [seleccion, setSeleccion] = useState(null);
+  const [conFicha, setConFicha] = useState(() => new Set());
+  const [abriendoFicha, setAbriendoFicha] = useState(null);
+
+  // Lista de fichas: primero la guardada (sirve sin internet); luego se actualiza del servidor en
+  // segundo plano. Si no hay conexión o falla, se queda con la guardada.
+  useEffect(() => {
+    let cancelado = false;
+    const leer = () =>
+      getArticulosConFicha()
+        .then((s) => !cancelado && setConFicha(s))
+        .catch(() => {});
+    leer();
+    actualizarFichasArticulo()
+      .then(leer)
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const seleccionar = (a) => setSeleccion((actual) => (actual === a.codigo ? null : a.codigo));
+
+  const verFicha = async (a) => {
+    if (abriendoFicha) return;
+    setAbriendoFicha(a.codigo);
+    try {
+      await abrirFichaArticulo(a.codigo);
+    } catch (e) {
+      Alert.alert('Ficha técnica', e?.message || 'No se pudo abrir la ficha técnica.');
+      // Puede que la ficha ya no exista (se borró de la lista): se vuelve a leer.
+      getArticulosConFicha().then(setConFicha).catch(() => {});
+    } finally {
+      setAbriendoFicha(null);
+    }
+  };
 
   // Solo el grupo y la bodega del ERP de la ruta activa.
   useEffect(() => {
@@ -147,7 +209,7 @@ export default function InventarioReporteView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Inventario" onBack={onBack} />
+      <CenteredHeader info={'Existencias de los artículos de tu ruta. Toca un artículo para ver su ficha técnica, si tiene, o usa el botón de lotes.'} title="Inventario" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SearchBar
@@ -186,7 +248,16 @@ export default function InventarioReporteView({ onBack }) {
             {filtrados.length ? (
               <View style={styles.lista}>
                 {pagina.map((a) => (
-                  <InventarioCard key={a.codigo} articulo={a} onVerLotes={setLotesDe} />
+                  <InventarioCard
+                    key={a.codigo}
+                    articulo={a}
+                    onVerLotes={setLotesDe}
+                    seleccionada={seleccion === a.codigo}
+                    onSeleccionar={seleccionar}
+                    tieneFicha={conFicha.has(a.codigo)}
+                    abriendoFicha={abriendoFicha === a.codigo}
+                    onVerFicha={verFicha}
+                  />
                 ))}
                 <Pagination
                   page={page}
@@ -258,8 +329,7 @@ const styles = StyleSheet.create({
   },
   lista: { gap: spacing.sm + 2 },
   card: {
-    flexDirection: 'row',
-    gap: spacing.sm + 4,
+    gap: spacing.sm + 2,
     backgroundColor: colors.background,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -272,6 +342,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
+  cardFila: { flexDirection: 'row', gap: spacing.sm + 4 },
+  cardSeleccionada: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  fichaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  fichaBtnText: { fontSize: 14, fontWeight: '700', color: colors.onPrimary },
   cardConExistencia: { borderLeftColor: colors.success },
   cardSinExistencia: { borderLeftColor: colors.primary },
   cardBody: { flex: 1, gap: 4 },

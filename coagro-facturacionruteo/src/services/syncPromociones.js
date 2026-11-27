@@ -46,20 +46,29 @@ const COL_PROMO = [
 ];
 const COL_DESTINO = ['PROMOCION_ID', 'TIPO', 'VALOR'];
 const COL_PRODUCTO = ['ID', 'PROMOCION_ID', 'ALCANCE', 'VALOR', 'CANTIDAD_MIN', 'DESCUENTO', 'PRECIO_ESPECIAL'];
+const COL_BONIFICADO = ['ID', 'PROMOCION_ID', 'ARTICULO', 'CANTIDAD'];
 
-// Descarga las promociones de la web: encabezados (FR_PROMOCION), productos (FR_PROMOCION_PRODUCTO) y
-// destinos (FR_PROMOCION_DESTINO). Solo descarga y valida: no toca la base. Devuelve
-// { guardar(db), resumen }; DatosScreen llama guardar dentro de UNA transacción con el resto de la
-// carga, que reemplaza las tres tablas completas. Productos y destinos se unen por PROMOCION_ID: los
-// que no tienen su promoción se descartan (se cuentan como omitidos).
+// Descarga las promociones de la web: encabezados (FR_PROMOCION), productos (FR_PROMOCION_PRODUCTO),
+// destinos (FR_PROMOCION_DESTINO) y artículos regalados (FR_PROMOCION_BONIFICADO). Solo descarga y
+// valida: no toca la base. Devuelve { guardar(db), resumen }; DatosScreen llama guardar dentro de UNA
+// transacción con el resto de la carga, que reemplaza las cuatro tablas completas. Productos, destinos
+// y bonificados se unen por PROMOCION_ID: los que no tienen su promoción se descartan (se cuentan como
+// omitidos). Un bonificado sin artículo o con CANTIDAD <= 0 también se omite.
+// ARTICULO_BONIFICADO / CANTIDAD_BONIFICADA del encabezado llegan siempre en null: no se usan.
 export async function descargarPromociones() {
   const promosJson = await getJson(PATHS.syncPromociones);
   const productosJson = await getJson(PATHS.syncPromocionesProductos);
   const destinosJson = await getJson(PATHS.syncPromocionesDestinos);
+  const bonificadosJson = await getJson(PATHS.syncPromocionesBonificados);
 
   const promosRaw = lista(promosJson, ['promociones'], 'promociones');
   const productosRaw = lista(productosJson, ['productos', 'promocionesProductos', 'promociones'], 'productos de promociones');
   const destinosRaw = lista(destinosJson, ['destinos', 'promocionesDestinos', 'promociones'], 'destinos de promociones');
+  const bonificadosRaw = lista(
+    bonificadosJson,
+    ['bonificados', 'promocionesBonificados', 'promociones'],
+    'bonificados de promociones'
+  );
 
   const esFila = (f) => f && typeof f === 'object';
   const promos = promosRaw.filter((p) => esFila(p) && entero(p.ID) != null);
@@ -75,15 +84,25 @@ export async function descargarPromociones() {
   const destinos = destinosRaw.filter(
     (d) => esFila(d) && ids.has(entero(d.PROMOCION_ID)) && textOr(d.TIPO) !== ''
   );
+  const bonificados = bonificadosRaw.filter(
+    (b) =>
+      esFila(b) &&
+      entero(b.ID) != null &&
+      ids.has(entero(b.PROMOCION_ID)) &&
+      textOr(b.ARTICULO) !== '' &&
+      num(b.CANTIDAD) > 0
+  );
   const omitidos =
     promosRaw.length - promos.length +
     (productosRaw.length - productos.length) +
-    (destinosRaw.length - destinos.length);
+    (destinosRaw.length - destinos.length) +
+    (bonificadosRaw.length - bonificados.length);
 
   const guardar = async (db) => {
     await db.execAsync(`
       DELETE FROM FR_PROMOCION_PRODUCTO;
       DELETE FROM FR_PROMOCION_DESTINO;
+      DELETE FROM FR_PROMOCION_BONIFICADO;
       DELETE FROM FR_PROMOCION;
     `);
 
@@ -137,6 +156,15 @@ export async function descargarPromociones() {
       await sqlDestino.finalizeAsync();
     }
 
+    const sqlBonificado = await db.prepareAsync(insertar('FR_PROMOCION_BONIFICADO', COL_BONIFICADO));
+    try {
+      for (const b of bonificados) {
+        await sqlBonificado.executeAsync([entero(b.ID), entero(b.PROMOCION_ID), textOr(b.ARTICULO), num(b.CANTIDAD)]);
+      }
+    } finally {
+      await sqlBonificado.finalizeAsync();
+    }
+
     await db.runAsync("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('sync_promociones_at', ?)", [
       new Date().toISOString(),
     ]);
@@ -144,6 +172,12 @@ export async function descargarPromociones() {
 
   return {
     guardar,
-    resumen: { promociones: promos.length, productos: productos.length, destinos: destinos.length, omitidos },
+    resumen: {
+      promociones: promos.length,
+      productos: productos.length,
+      destinos: destinos.length,
+      bonificados: bonificados.length,
+      omitidos,
+    },
   };
 }

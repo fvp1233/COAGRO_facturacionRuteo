@@ -44,6 +44,7 @@ Cada pago a un documento es **un recibo**. La app lo sube con `POST /fr/sync/env
   - `TRA <n>` = número de la transferencia; `DEP <n>` = boleta del depósito.
   - `CH <número> BCO <banco> CTA <cuenta> <dd/mm/aaaa> $<monto>` = un cheque. Banco, cuenta y fecha son opcionales.
   - Admite 80 caracteres. Con muchos cheques se recorta, y lo que falte para cuadrar con `MON_CHE` sale como un cheque sin detalle. `formasDeLinea` ya lo maneja.
+- **Recibo en varias cuentas:** si el cliente reparte el pago entre bancos (p. ej. transferencia al Agrícola y depósito al Hipotecario), la app manda **un depósito por cuenta con el mismo `NUM_DEP`**. Cada uno lleva solo lo que entró en esa cuenta (su `MON_DEP`, sus líneas y su `REF`). El efectivo y los cheques van a la cuenta principal del recibo. Para el recibo impreso se juntan todas las partes (ver `cuentas` y `cuentaDeposito` abajo).
 
 ## El objeto `recibo`
 
@@ -57,6 +58,7 @@ Lo arma `reciboDesdeServidor`, o puedes armarlo tú directamente:
 | `moneda` | `alCXC_ENC_DEP.IND_MON` | "Dólar (USD)" / "Moneda local" |
 | `monto` | Suma de las formas de pago | "La suma de" (en letras y en cifra), Pagado y TOTAL |
 | `cuenta` / `nombreCuenta` | `CTA_BCO` / `alCXC_CTA_BCO.NOM_CTA` | "Cuenta" |
+| `cuentas` (opcional) | Una por parte del recibo: `[{ cuenta, nombreCuenta, monto }]` | Con más de una, "Cuenta" las lista: `<nombreCuenta> · Cta. <cuenta>: $<monto>`, una por renglón |
 | `notas` | `alCXC_ENC_DEP.NOTAS` | "Referencias y notas" |
 | `cliente` / `nombreCliente` | Cliente del documento (ej. `alCXC_PEN_COB.COD_CLT` + `CLIENTE.NOM_CLT`) | "Recibimos de" |
 | `tecnico` / `nombreTecnico` | Agente dueño de la ruta (en la app: `AGENTE` / `NOMBRE_AGENTE` del documento; si no hay agente, la ruta) | "Técnico / ruta" |
@@ -64,7 +66,7 @@ Lo arma `reciboDesdeServidor`, o puedes armarlo tú directamente:
 | `cancelado` | `saldoNuevo <= 0` | Estado **CANCELADO** (verde) o **ABONO** (naranja) |
 | `formas[]` | `formasDeLinea(linea)` | Tabla "Tipo de pago" y referencias |
 
-Cada elemento de `formas` tiene `{ forma, monto, numeroCheque?, banco?, fecha?, transaccion? }`, donde `forma` es `EFECTIVO`, `CHEQUE`, `TRANSFERENCIA` o `DEPOSITO`.
+Cada elemento de `formas` tiene `{ forma, monto, numeroCheque?, banco?, fecha?, transaccion?, cuentaDeposito? }`, donde `forma` es `EFECTIVO`, `CHEQUE`, `TRANSFERENCIA` o `DEPOSITO`. En un recibo de varias cuentas, las transferencias y depósitos llevan `cuentaDeposito` (nombre de su cuenta) y la referencia sale como `Transferencia No. X — $200.00 (BANCO AGRICOLA)`. El total, la suma en letras y la tabla "Tipo de pago" suman las formas de todas las cuentas.
 
 ## Reglas del formato
 

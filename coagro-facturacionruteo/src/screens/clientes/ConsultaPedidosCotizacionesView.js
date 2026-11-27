@@ -190,7 +190,7 @@ export default function ConsultaPedidosCotizacionesView({ cliente, ruta, onBack 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Pedidos y cotizaciones" onBack={onBack} />
+      <CenteredHeader info={'Pedidos y cotizaciones de este cliente hechos en el equipo. Selecciona uno para imprimirlo.'} title="Pedidos y cotizaciones" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>

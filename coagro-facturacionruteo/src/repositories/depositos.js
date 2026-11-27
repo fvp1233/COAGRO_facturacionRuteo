@@ -1,10 +1,11 @@
 import { getDatabase } from '../db/database';
 
 // Recibos de cobro como depósitos (alCXC_ENC_DEP local; se suben con POST /fr/sync/enviar -> depositos).
-// Cada pago a un documento es UN recibo: un encabezado en alCXC_ENC_DEP con NUM_DEP = número del
-// recibo (RUTA_CONSECUT_RT.RECIBO de la ruta) y la cuenta de banco elegida, y una línea por documento
-// en alCXC_DET_DEP con el monto de cada forma de pago. Cada forma de pago (COBRO_PAGO_DET) apunta a
-// su recibo con DEP_CIA + DEP_BCO + DEP_CTA + DEP_NUM.
+// Cada pago a un documento es UN recibo (NUM_DEP = RUTA_CONSECUT_RT.RECIBO de la ruta). Si el cliente
+// pagó a varias cuentas de banco, el recibo tiene una PARTE por cuenta: un encabezado en alCXC_ENC_DEP
+// por cuenta, todos con el mismo NUM_DEP (el servidor los une por NUM_DEP + CTA_BCO), y en cada uno una
+// línea por documento en alCXC_DET_DEP con lo que se pagó a esa cuenta. Cada forma de pago
+// (COBRO_PAGO_DET) apunta a su parte con DEP_CIA + DEP_BCO + DEP_CTA + DEP_NUM.
 
 const EPS = 0.005;
 
@@ -37,10 +38,13 @@ const textoRef = (filas) =>
     .filter(Boolean)
     .join('; ');
 
-// Recibos pendientes de enviar, en el formato de POST /fr/sync/enviar -> depositos.
+// Partes de recibo pendientes de enviar, en el formato de POST /fr/sync/enviar -> depositos: un
+// depósito por cuenta (un recibo repartido en dos cuentas da dos depósitos con el mismo NUM_DEP; uno
+// de una sola cuenta, el mismo JSON de siempre). Solo van las partes sin enviar: si un envío se cortó a
+// la mitad, el siguiente manda únicamente las que faltaban (y reenviar una ya guardada es inofensivo).
 // Las líneas se agrupan por documento (el servidor rechaza un NUM_DOC repetido): MON_EFE (efectivo),
 // MON_CHE (cheques), MON_DEP (depósito del cliente), MON_TRA (transferencia) y REF. MON_DEP y MON_TRA
-// solo van si tienen monto. MON_DEP del encabezado = suma de todas las líneas.
+// solo van si tienen monto. MON_DEP del encabezado = suma de las líneas de ESA cuenta.
 // Solo se envían los recibos (ORIGEN 'RECIBO', NUM_DEP = RERT_<ruta>_<n>): los depósitos de pruebas
 // con el diseño anterior (ORIGEN 'PAGO' / 'DEPOSITO', NUM_DEP = boleta o transferencia) ya no aplican,
 // no se envían ni cuentan como pendientes (no bloquean Cargar datos).
@@ -111,7 +115,6 @@ export async function leerDepositosPendientes(db) {
 const t = (v) => (v == null ? '' : String(v).trim());
 const num = (v) => Number(v ?? 0) || 0;
 const WHERE_RECIBO = 'COD_CIA = ? AND COD_BCO = ? AND CTA_BCO = ? AND NUM_DEP = ?';
-const WHERE_DET_RECIBO = 'DEP_CIA = ? AND DEP_BCO = ? AND DEP_CTA = ? AND DEP_NUM = ?';
 
 // Formas de pago de una línea de alCXC_DET_DEP. Los números de transferencia / boleta y el detalle de
 // los cheques salen de REF ('TRA 778899; DEP 5566; CH 1234 BCO X CTA 5678 11/11/2026 $100.00'). Si REF
@@ -149,36 +152,52 @@ export function formasDeLinea(l) {
   return formas;
 }
 
-// Borra del equipo un recibo con sus pagos (COBRO_PAGO + COBRO_PAGO_DET).
-async function borrarRecibo(db, llave) {
-  const pagos = await db.getAllAsync(`SELECT DISTINCT ID_PAGO FROM COBRO_PAGO_DET WHERE ${WHERE_DET_RECIBO}`, llave);
+// Borra del equipo un recibo completo (todas sus partes, una por cuenta) con sus pagos
+// (COBRO_PAGO + COBRO_PAGO_DET).
+async function borrarRecibo(db, numero) {
+  const pagos = await db.getAllAsync('SELECT DISTINCT ID_PAGO FROM COBRO_PAGO_DET WHERE DEP_NUM = ?', [numero]);
   for (const { ID_PAGO } of pagos) {
     await db.runAsync('DELETE FROM COBRO_PAGO_DET WHERE ID_PAGO = ?', [ID_PAGO]);
     await db.runAsync('DELETE FROM COBRO_PAGO WHERE ID = ?', [ID_PAGO]);
   }
-  await db.runAsync(`DELETE FROM alCXC_ENC_DEP WHERE ${WHERE_RECIBO}`, llave);
+  await db.runAsync("DELETE FROM alCXC_ENC_DEP WHERE NUM_DEP = ? AND ORIGEN = 'RECIBO'", [numero]);
 }
 
 // Guarda en el equipo un recibo pendiente que llegó del servidor y no estaba (reinstalación, otro
-// equipo de la misma handheld): encabezado + un pago por línea (documento) con sus formas de pago.
-async function insertarReciboServidor(db, r) {
-  const llave = [t(r.COD_CIA), t(r.COD_BCO), t(r.CTA_BCO), t(r.NUM_DEP)];
-  const fecha = t(r.FEC_DEP);
-  const moneda = t(r.IND_MON) === 'D' ? 'D' : 'L';
-  await db.runAsync(
-    `INSERT OR REPLACE INTO alCXC_ENC_DEP
-       (COD_CIA, COD_BCO, CTA_BCO, NUM_DEP, FEC_DEP, IND_MON, NOTAS, ORIGEN, ENVIADO, CONSEC_DEP, DOC_PRO)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'RECIBO', 1, ?, 'N')`,
-    [...llave, fecha, moneda, r.NOTAS ?? null, r.CONSEC_DEP ?? null]
-  );
-  for (const l of Array.isArray(r.lineas) ? r.lineas : []) {
-    const formas = formasDeLinea(l);
-    if (!formas.length) continue;
+// equipo de la misma handheld). partes: las entradas del servidor con ese NUM_DEP, una por cuenta.
+// Se guarda un encabezado por parte y UN pago por documento (aunque se haya pagado en varias
+// cuentas), con las formas de pago de cada parte apuntando a la suya: así el recibo sale una vez y
+// el saldo del documento se descuenta una vez.
+async function insertarReciboServidor(db, partes) {
+  const [primera] = partes;
+  const numero = t(primera.NUM_DEP);
+  const fecha = t(primera.FEC_DEP);
+  const moneda = t(primera.IND_MON) === 'D' ? 'D' : 'L';
+  const porDoc = new Map();
+  for (const r of partes) {
+    const llave = [t(r.COD_CIA), t(r.COD_BCO), t(r.CTA_BCO), numero];
+    await db.runAsync(
+      `INSERT OR REPLACE INTO alCXC_ENC_DEP
+         (COD_CIA, COD_BCO, CTA_BCO, NUM_DEP, FEC_DEP, IND_MON, NOTAS, ORIGEN, ENVIADO, CONSEC_DEP, DOC_PRO)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'RECIBO', 1, ?, 'N')`,
+      [...llave, fecha, moneda, r.NOTAS ?? null, r.CONSEC_DEP ?? null]
+    );
+    for (const l of Array.isArray(r.lineas) ? r.lineas : []) {
+      const formas = formasDeLinea(l);
+      if (!formas.length) continue;
+      const clave = [t(l.COD_TIP_DC), t(l.NUM_DOC), t(l.COD_CLT), t(l.COD_ZON)].join('|');
+      const doc = porDoc.get(clave) ?? { linea: l, formas: [] };
+      for (const f of formas) doc.formas.push({ ...f, llave });
+      porDoc.set(clave, doc);
+    }
+  }
+
+  for (const { linea: l, formas } of porDoc.values()) {
     const res = await db.runAsync(
       `INSERT INTO COBRO_PAGO (COD_CIA, COD_CLT, COD_ZON, COD_TIP_DC, NUM_DOC, MONEDA, FECHA, MONTO, ENVIADO, NUM_REC)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
       [
-        llave[0] || null,
+        formas[0].llave[0] || null,
         t(l.COD_CLT),
         t(l.COD_ZON),
         t(l.COD_TIP_DC),
@@ -186,11 +205,12 @@ async function insertarReciboServidor(db, r) {
         moneda,
         fecha,
         redondea(formas.reduce((s, f) => s + f.monto, 0)),
-        llave[3],
+        numero,
       ]
     );
     let linea = 1;
     for (const f of formas) {
+      const llave = f.llave;
       await db.runAsync(
         `INSERT INTO COBRO_PAGO_DET
            (ID_PAGO, LINEA, FORMA, MONTO, NUM_CHEQUE, NUM_CUENTA, BANCO_CHEQUE, FECHA_CHEQUE, NUM_TRANSACCION,
@@ -216,35 +236,60 @@ async function insertarReciboServidor(db, r) {
 }
 
 // Cuadra los recibos del equipo con los pendientes del servidor, como parte de "Cargar datos" (lo que
-// estaba pendiente de enviar ya se envió antes de cargar):
-// - Recibo enviado que el servidor manda (DOC_PRO 'N'): se queda (el del equipo tiene más detalle).
-// - Recibo enviado que el servidor ya no manda: control lo aplicó ('S'). Se borra del equipo, salvo los
-//   de hoy, que se conservan (marcados 'S') para poder reimprimirlos.
-// - Recibo del servidor que el equipo no tiene: se agrega.
+// estaba pendiente de enviar ya se envió antes de cargar). El servidor manda UNA entrada por parte del
+// recibo (mismo NUM_DEP, distinta CTA_BCO) y control puede aplicar cada parte por separado:
+// - Parte enviada que el servidor manda: sigue pendiente (DOC_PRO 'N').
+// - Parte enviada que el servidor ya no manda: control la aplicó (DOC_PRO 'S'; ya no se descuenta del
+//   saldo, ver pagos.getAbonosCliente).
+// - Recibo con TODAS sus partes aplicadas: se borra del equipo, salvo los de hoy, que se conservan
+//   (marcados 'S') para poder reimprimirlos.
+// - Recibo del servidor que el equipo no tiene (ninguna parte con ese NUM_DEP): se agrega completo.
 export async function sincronizarRecibos(db, recibos) {
   const delServidor = new Map(recibos.map((r) => [`${t(r.CTA_BCO)}|${t(r.NUM_DEP)}`, r]));
   const locales = await db.getAllAsync(
     "SELECT COD_CIA, COD_BCO, CTA_BCO, NUM_DEP FROM alCXC_ENC_DEP WHERE ORIGEN = 'RECIBO' AND ENVIADO = 1"
   );
+  const porNumero = new Map();
   for (const e of locales) {
-    const llave = [e.COD_CIA, e.COD_BCO, e.CTA_BCO, e.NUM_DEP];
-    const clave = `${e.CTA_BCO}|${e.NUM_DEP}`;
-    if (delServidor.has(clave)) {
-      await db.runAsync(`UPDATE alCXC_ENC_DEP SET DOC_PRO = 'N' WHERE ${WHERE_RECIBO}`, llave);
+    if (!porNumero.has(e.NUM_DEP)) porNumero.set(e.NUM_DEP, []);
+    porNumero.get(e.NUM_DEP).push(e);
+  }
+
+  for (const [numero, partes] of porNumero) {
+    let pendientes = 0;
+    for (const e of partes) {
+      const llave = [e.COD_CIA, e.COD_BCO, e.CTA_BCO, e.NUM_DEP];
+      const clave = `${t(e.CTA_BCO)}|${t(e.NUM_DEP)}`;
+      const sigue = delServidor.has(clave);
+      if (sigue) pendientes += 1;
       delServidor.delete(clave);
-      continue;
+      await db.runAsync(`UPDATE alCXC_ENC_DEP SET DOC_PRO = ? WHERE ${WHERE_RECIBO}`, [sigue ? 'N' : 'S', ...llave]);
     }
+    if (pendientes) continue;
     const deHoy = await db.getFirstAsync(
       `SELECT 1 AS x FROM COBRO_PAGO p JOIN COBRO_PAGO_DET d ON d.ID_PAGO = p.ID
-        WHERE d.DEP_CIA = ? AND d.DEP_BCO = ? AND d.DEP_CTA = ? AND d.DEP_NUM = ?
-          AND date(p.FECHA) = date('now', 'localtime')
+        WHERE d.DEP_NUM = ? AND date(p.FECHA) = date('now', 'localtime')
         LIMIT 1`,
-      llave
+      [numero]
     );
-    if (deHoy) await db.runAsync(`UPDATE alCXC_ENC_DEP SET DOC_PRO = 'S' WHERE ${WHERE_RECIBO}`, llave);
-    else await borrarRecibo(db, llave);
+    if (!deHoy) await borrarRecibo(db, numero);
   }
-  for (const r of delServidor.values()) await insertarReciboServidor(db, r);
+
+  // Partes que el equipo no tiene, juntas por recibo. Si el equipo ya tiene alguna parte de ese
+  // número (aunque sea sin enviar), no se agrega nada: el del equipo tiene más detalle.
+  const nuevos = new Map();
+  for (const r of delServidor.values()) {
+    const numero = t(r.NUM_DEP);
+    if (!nuevos.has(numero)) nuevos.set(numero, []);
+    nuevos.get(numero).push(r);
+  }
+  for (const [numero, partes] of nuevos) {
+    const existe = await db.getFirstAsync(
+      "SELECT 1 AS x FROM alCXC_ENC_DEP WHERE NUM_DEP = ? AND ORIGEN = 'RECIBO' LIMIT 1",
+      [numero]
+    );
+    if (!existe) await insertarReciboServidor(db, partes);
+  }
 }
 
 // Marca como enviados los pagos cuyo recibo ya se envió.

@@ -111,7 +111,7 @@ export default function ParametrosSistemaView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Parámetros del Sistema" onBack={onBack} />
+      <CenteredHeader info={'Consecutivos de documentos de la ruta elegida: el próximo número de pedido, recibo, nota de crédito y demás.'} title="Parámetros del Sistema" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <SelectField

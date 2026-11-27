@@ -22,6 +22,9 @@ import { descargarPromociones } from '../services/syncPromociones';
 import { descargarPromocionales } from '../services/syncPromocionales';
 import { descargarEmpresa } from '../services/syncEmpresa';
 import { descargarMunicipios } from '../services/syncMunicipios';
+import { descargarFichasArticulo, limpiarCopiasFichas } from '../services/fichaArticulo';
+import { descargarNotasCredito } from '../services/syncNotasCredito';
+import { descargarInventarios } from '../services/syncInventarios';
 import { isAuthError, isNetworkError } from '../services/api';
 import { esErrorVinculada } from '../services/deviceFirma';
 import FirmaEquipo from '../components/ui/FirmaEquipo';
@@ -176,11 +179,32 @@ export default function DatosScreen({ module, onBack }) {
           agregarAviso(`No se actualizaron los datos de la empresa: ${e?.message || 'error del servidor'}`);
           return { guardar: async () => {}, resumen: { empresa: 0, omitidos: 0 } };
         }),
-        // Municipios de la reforma: igual, si el servidor falla se conservan los guardados.
+        // Departamentos, municipios y distritos (catálogos de Softland): igual, si el servidor falla
+        // se conservan los guardados.
         municipios: await descargarMunicipios().catch((e) => {
           if (isAuthError(e) || isNetworkError(e)) throw e;
-          agregarAviso(`No se actualizaron los municipios y distritos: ${e?.message || 'error del servidor'}`);
-          return { guardar: async () => {}, resumen: { municipios: 0, distritos: 0, omitidos: 0 } };
+          agregarAviso(`No se actualizaron los departamentos, municipios y distritos: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { departamentos: 0, municipios: 0, distritos: 0, omitidos: 0 } };
+        }),
+        // Lista de fichas técnicas de artículos (sin PDF). Igual: si falla se conserva la guardada.
+        fichas: await descargarFichasArticulo().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron las fichas técnicas: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { fichas: 0, omitidos: 0 } };
+        }),
+        // Notas de crédito de las rutas (pendientes de procesar y de los últimos 30 días). Si el servidor
+        // falla se conservan las guardadas; las que aún no se envían nunca se tocan.
+        notasCredito: await descargarNotasCredito().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron las notas de crédito: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { notasCredito: null, omitidos: 0 } };
+        }),
+        // Inventarios de clientes de las rutas (pendientes de procesar y de los últimos 30 días). Igual:
+        // si el servidor falla se conservan los guardados; los que aún no se envían nunca se tocan.
+        inventarios: await descargarInventarios().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron los inventarios de clientes: ${e?.message || 'error del servidor'}`);
+          return { guardar: async () => {}, resumen: { inventarios: null, omitidos: 0 } };
         }),
         // Va al final: cuadra los recibos del equipo con los pendientes del servidor (DOC_PRO = 'N').
         recibos: await descargarRecibosPendientes(),
@@ -190,7 +214,9 @@ export default function DatosScreen({ module, onBack }) {
         await limpiarEnviados(db);
         for (const d of Object.values(descargas)) await d.guardar(db);
       });
-      const { clientes, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas } =
+      // Fuera de la transacción: borra las copias de fichas que ya no están en la lista.
+      await limpiarCopiasFichas().catch(() => {});
+      const { clientes, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas, notasCredito, inventarios } =
         Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
@@ -211,6 +237,8 @@ export default function DatosScreen({ module, onBack }) {
         promocionales: promocionales.promocionales,
         recibosPendientes: recibos.recibos,
         metas: metas.metas,
+        notasCredito: notasCredito.notasCredito,
+        inventarios: inventarios.inventarios,
         omitidos:
           clientes.omitidos +
           articulos.omitidos +
@@ -226,7 +254,9 @@ export default function DatosScreen({ module, onBack }) {
           promociones.omitidos +
           promocionales.omitidos +
           recibos.omitidos +
-          metas.omitidos,
+          metas.omitidos +
+          notasCredito.omitidos +
+          inventarios.omitidos,
       });
     } catch (e) {
       mostrarError(e, 'Debes estar conectado a internet para enviar y descargar los datos. Revisa tu conexión e intenta de nuevo.');
@@ -304,7 +334,7 @@ export default function DatosScreen({ module, onBack }) {
         {resumen ? (
           <View style={[styles.message, styles.ok]}>
             <Text style={styles.okText}>
-              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas, {resumen.cuentasBanco} cuentas de banco, {resumen.descuentos} descuentos, {resumen.promociones} promociones, {resumen.promocionales} solicitudes de promocionales, {resumen.recibosPendientes} recibos pendientes de aplicar{resumen.metas != null ? `, ${resumen.metas} metas de venta del mes` : ''}.
+              Carga completa: {resumen.clientes} clientes, {resumen.clientesCia} datos comerciales, {resumen.rutas} rutas, {resumen.asignaciones} asignaciones, {resumen.articulos} artículos, {resumen.precios} precios, {resumen.lotes} lotes, {resumen.documentos} documentos por cobrar ({resumen.documentosAgente} tuyos), {resumen.consecutivos} consecutivos de ruta, {resumen.cotizaciones} cotizaciones, historial de {resumen.historialPedidos} pedidos y {resumen.historialFacturas} facturas, {resumen.cuentasBanco} cuentas de banco, {resumen.descuentos} descuentos, {resumen.promociones} promociones, {resumen.promocionales} solicitudes de promocionales, {resumen.recibosPendientes} recibos pendientes de aplicar{resumen.metas != null ? `, ${resumen.metas} metas de venta del mes` : ''}{resumen.notasCredito != null ? `, ${resumen.notasCredito} notas de crédito` : ''}{resumen.inventarios != null ? `, ${resumen.inventarios} inventarios de clientes` : ''}.
               {resumen.omitidos > 0 ? ` (${resumen.omitidos} filas omitidas por datos incompletos)` : ''}
             </Text>
           </View>

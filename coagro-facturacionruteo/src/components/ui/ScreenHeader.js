@@ -16,9 +16,12 @@ export default function ScreenHeader({ eyebrow = 'COAGRO GANADERÍA', title, onB
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
       </View>
 
-      <Pressable onPress={onMenu} hitSlop={10} style={styles.iconButton}>
-        <Feather name="more-vertical" size={22} color={colors.text} />
-      </Pressable>
+      {/* Menú de tres puntos: solo si la pantalla le da una acción. */}
+      {onMenu ? (
+        <Pressable onPress={onMenu} hitSlop={10} style={styles.iconButton}>
+          <Feather name="more-vertical" size={22} color={colors.text} />
+        </Pressable>
+      ) : null}
       <Image source={logo} style={styles.logo} resizeMode="contain" />
     </View>
   );

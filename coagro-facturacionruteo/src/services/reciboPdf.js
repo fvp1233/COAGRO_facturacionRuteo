@@ -25,12 +25,20 @@ export const partesFecha = (v) => {
   return m ? { dia: m[3], mes: m[2], anio: m[1] } : { dia: '', mes: '', anio: '' };
 };
 
-// "Cuenta: Nombre de la cuenta · Cta. 123" (sin el código del banco, que confunde).
+// "Nombre de la cuenta · Cta. 123" (sin el código del banco, que confunde).
+const nombreCuentaTexto = (c) => [c.nombreCuenta, `Cta. ${c.cuenta}`].filter(Boolean).join(' · ');
+
+// "Cuenta: Nombre de la cuenta · Cta. 123". Recibo repartido en varias cuentas (r.cuentas con más de
+// una): "Cuentas: A · Cta. 1: $200.00; B · Cta. 2: $100.00".
 // Los pagos registrados antes de los recibos no tienen cuenta.
-export const textoCuenta = (r) =>
-  r.cuenta
-    ? `Cuenta: ${[r.nombreCuenta, `Cta. ${r.cuenta}`].filter(Boolean).join(' · ')}`
+export const textoCuenta = (r) => {
+  if (r.cuentas?.length > 1) {
+    return `Cuentas: ${r.cuentas.map((c) => `${nombreCuentaTexto(c)}: ${formatMonto(c.monto)}`).join('; ')}`;
+  }
+  return r.cuenta
+    ? `Cuenta: ${nombreCuentaTexto(r)}`
     : 'Cuenta: sin cuenta registrada (pago anterior a los recibos)';
+};
 
 // Filas de la tabla: la primera lleva el documento con efectivo, transferencia, depósito y el primer
 // cheque; cada cheque adicional va en su propia fila.
@@ -81,8 +89,12 @@ function htmlRecibo(r) {
   const estado = r.cancelado ? 'CANCELADO' : 'ABONO';
   const referencias = r.formas
     .filter((x) => (x.forma === 'TRANSFERENCIA' || x.forma === 'DEPOSITO') && x.transaccion)
-    .map((x) => `${x.forma === 'DEPOSITO' ? 'Depósito, boleta' : 'Transferencia'} No. ${x.transaccion} — ${formatMonto(x.monto)}`);
-  const cuenta = r.cuenta ? [r.nombreCuenta, `Cta. ${r.cuenta}`].filter(Boolean).join(' · ') : 'Sin cuenta registrada';
+    .map((x) => `${x.forma === 'DEPOSITO' ? 'Depósito, boleta' : 'Transferencia'} No. ${x.transaccion} — ${formatMonto(x.monto)}${x.cuentaDeposito ? ` (${x.cuentaDeposito})` : ''}`);
+  // r.cuentas (opcional): recibo abonado a varias cuentas, [{ cuenta, nombreCuenta, monto }]. Igual que
+  // utils/reciboHtml.js del backend. El total, la suma en letras y la tabla suman todas las cuentas.
+  const cuenta = r.cuentas?.length > 1
+    ? r.cuentas.map((c) => esc(`${nombreCuentaTexto(c)}: ${formatMonto(c.monto)}`)).join('<br />')
+    : esc(r.cuenta ? nombreCuentaTexto(r) : 'Sin cuenta registrada');
   const saldoDespues = r.saldoNuevo != null ? Math.max(0, Number(r.saldoNuevo)) : null;
 
   const fila = (x, i) => `
@@ -218,7 +230,7 @@ function htmlRecibo(r) {
       <table>
         <tr><td class="etq">Técnico / ruta</td><td>${esc([r.tecnico, r.nombreTecnico].filter(Boolean).join(' - '))}</td></tr>
         <tr><td class="etq">Moneda</td><td>${esc(MONEDAS[r.moneda] ?? r.moneda ?? '')}</td></tr>
-        <tr><td class="etq">Cuenta</td><td>${esc(cuenta)}</td></tr>
+        <tr><td class="etq">Cuenta</td><td>${cuenta}</td></tr>
       </table>
     </div>
   </div>
@@ -293,7 +305,8 @@ function borrarRecibosEnCache() {
 
 // PDF del recibo con dos modos (como el del pedido, services/pedidoPdf):
 //  - Servidor: si el recibo ya está enviado y control aún no lo aplica, se descarga el PDF del backend
-//    (GET /fr/mobile/recibo/:numDep/pdf, misma plantilla: utils/reciboHtml.js).
+//    (GET /fr/mobile/recibo/:numDep/pdf, misma plantilla: utils/reciboHtml.js). Se pide con la cuenta
+//    de cualquiera de sus partes (la primera): el servidor devuelve el recibo completo, con todas.
 //  - Equipo: si no se ha enviado, ya está aplicado (el servidor ya no puede reconstruir los saldos;
 //    el equipo los guardó al cobrar), no hay conexión o el servidor falla, se arma aquí.
 // Devuelve 'servidor' o 'equipo'.

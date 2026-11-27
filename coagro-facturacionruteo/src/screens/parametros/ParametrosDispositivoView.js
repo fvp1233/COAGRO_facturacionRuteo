@@ -91,7 +91,7 @@ export default function ParametrosDispositivoView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Parámetros del Dispositivo" onBack={onBack} />
+      <CenteredHeader info={'Datos de este equipo: ruta, fecha y hora, versión de la app y la configuración de flete de la ruta.'} title="Parámetros del Dispositivo" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         {cargando ? (

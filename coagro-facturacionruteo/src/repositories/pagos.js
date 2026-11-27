@@ -14,6 +14,19 @@ export const FORMAS_PAGO = {
   DEPOSITO: 'Depósito',
 };
 
+// Cuenta de banco de cada forma de pago. Un recibo puede repartirse entre varias cuentas: se guarda
+// (y se envía) un depósito por cuenta con el MISMO número de recibo (NUM_DEP).
+// - Transferencia y depósito del cliente: cada una lleva su cuenta (forma.cuentaDeposito).
+// - Efectivo y cheques: van a la cuenta principal del recibo, donde el cobrador los deposita después.
+// PENDIENTE confirmar con el negocio si efectivo y cheques también se reparten: si es así, se quitan
+// de FORMAS_CUENTA_PRINCIPAL y la pantalla les pide su cuenta como a las transferencias.
+export const FORMAS_CUENTA_PRINCIPAL = ['EFECTIVO', 'CHEQUE'];
+export const usaCuentaPrincipal = (forma) => FORMAS_CUENTA_PRINCIPAL.includes(forma);
+// cuenta: { compania, banco, cuenta, ... } de alCXC_CTA_BCO o null.
+export const cuentaDeForma = (f, cuentaPrincipal) =>
+  (usaCuentaPrincipal(f.forma) ? cuentaPrincipal : f.cuentaDeposito) ?? null;
+export const claveCuenta = (c) => `${c?.compania ?? ''}|${c?.banco ?? ''}|${c?.cuenta ?? ''}`;
+
 // 'Local' | 'Dólar' (moneda del cobro) → 'L' | 'D'.
 export const codigoMoneda = (moneda) => (String(moneda).toUpperCase().startsWith('D') ? 'D' : 'L');
 
@@ -35,22 +48,45 @@ const SQL_NUM_REC = `COALESCE(NULLIF(p.NUM_REC, ''), (
 // (RERT_01_00001). El backend valida lo mismo.
 const FORMATO_RECIBO = /^[A-Za-z0-9_-]{0,29}\d$/;
 
-// DOC_PRO del recibo de un pago (alias p de COBRO_PAGO): 'N' pendiente, 'S' aplicado por control,
-// null si el pago no tiene recibo.
+// DOC_PRO del recibo de un pago (alias p de COBRO_PAGO): 'S' = control aplicó TODAS sus partes (una
+// por cuenta), 'N' = alguna sigue pendiente, null si el pago no tiene recibo.
 const SQL_DOC_PRO = `(
-    SELECT e.DOC_PRO FROM COBRO_PAGO_DET d
+    SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                WHEN SUM(CASE WHEN e.DOC_PRO = 'S' THEN 1 ELSE 0 END) = COUNT(*) THEN 'S'
+                ELSE 'N' END
+      FROM COBRO_PAGO_DET d
       JOIN alCXC_ENC_DEP e
         ON e.COD_CIA = d.DEP_CIA AND e.COD_BCO = d.DEP_BCO AND e.CTA_BCO = d.DEP_CTA AND e.NUM_DEP = d.DEP_NUM
-     WHERE d.ID_PAGO = p.ID
-     LIMIT 1)`;
+     WHERE d.ID_PAGO = p.ID)`;
+
+// Parte del pago (alias p) que control aún no aplica: suma de sus formas de pago cuya parte del
+// recibo (cuenta) no está aplicada ('S'). Si control aplicó solo la parte de una cuenta, el saldo del
+// servidor ya la trae descontada y aquí ya no se cuenta. Un pago sin formas cuenta completo.
+const SQL_MONTO_PENDIENTE = `(
+    CASE WHEN EXISTS (SELECT 1 FROM COBRO_PAGO_DET x WHERE x.ID_PAGO = p.ID)
+         THEN (SELECT COALESCE(SUM(d.MONTO), 0) FROM COBRO_PAGO_DET d
+                 LEFT JOIN alCXC_ENC_DEP e
+                        ON e.COD_CIA = d.DEP_CIA AND e.COD_BCO = d.DEP_BCO AND e.CTA_BCO = d.DEP_CTA
+                       AND e.NUM_DEP = d.DEP_NUM
+                WHERE d.ID_PAGO = p.ID AND COALESCE(e.DOC_PRO, '') <> 'S')
+         ELSE p.MONTO END)`;
+
+// Abono para el cálculo de saldo (repositories/cobros): monto = lo que aún no aplica control;
+// aplicado = ya no queda nada por descontar.
+const abonoSaldo = (r) => {
+  const pendiente = Number(r.PENDIENTE ?? 0);
+  return { moneda: r.MONEDA, monto: pendiente, aplicado: pendiente <= 0.005 };
+};
 
 // Abonos de los documentos de un cliente en una ruta, agrupados por documento.
 // Devuelve Map clave 'codTipo|documento' → [{ moneda: 'L'|'D', monto, aplicado }].
-// aplicado = control ya lo aplicó en el ERP (DOC_PRO 'S'): ya no se descuenta del saldo.
+// monto = parte del abono que control aún no aplica en el ERP (la que se descuenta del saldo);
+// aplicado = control ya aplicó todo el abono: ya no se descuenta. Un recibo repartido en varias
+// cuentas es UN pago por documento: se descuenta una sola vez.
 export async function getAbonosCliente({ cliente, ruta }) {
   const db = await getDatabase();
   const rows = await db.getAllAsync(
-    `SELECT p.COD_TIP_DC, p.NUM_DOC, p.MONEDA, p.MONTO, ${SQL_DOC_PRO} AS DOC_PRO
+    `SELECT p.COD_TIP_DC, p.NUM_DOC, p.MONEDA, ${SQL_MONTO_PENDIENTE} AS PENDIENTE
        FROM COBRO_PAGO p
       WHERE p.COD_CLT = ? AND p.COD_ZON = ?
       ORDER BY p.ID`,
@@ -60,7 +96,7 @@ export async function getAbonosCliente({ cliente, ruta }) {
   for (const r of rows) {
     const clave = claveDoc(r.COD_TIP_DC, r.NUM_DOC);
     const lista = abonos.get(clave) ?? [];
-    lista.push({ moneda: r.MONEDA, monto: Number(r.MONTO ?? 0), aplicado: r.DOC_PRO === 'S' });
+    lista.push(abonoSaldo(r));
     abonos.set(clave, lista);
   }
   return abonos;
@@ -115,11 +151,15 @@ export async function getPagosDocumento({ cliente, ruta, codTipo, documento }) {
 //   el NUM_DEP del servidor tal cual (texto). Si todo
 //   se guarda, el consecutivo avanza en 1 y se marca para enviarse (como el de pedidos).
 // - COBRO_PAGO (encabezado, NUM_REC) + COBRO_PAGO_DET (una fila por forma de pago).
-// - alCXC_ENC_DEP con la cuenta de banco del recibo; todas las formas de pago apuntan a él.
-//   compania: COD_CIA del documento. cuenta: { compania, banco, cuenta } de alCXC_CTA_BCO.
+// - alCXC_ENC_DEP: UNO POR CUENTA de banco del recibo, todos con el mismo NUM_DEP (así los une el
+//   servidor: NUM_DEP + CTA_BCO). Cada forma de pago apunta al de su cuenta (cuentaDeForma). Con una
+//   sola cuenta queda un encabezado, como siempre.
+//   compania: COD_CIA del documento. cuentaPrincipal: { compania, banco, cuenta } de alCXC_CTA_BCO (la
+//   del efectivo y los cheques; puede ser null si el pago no lleva ninguno de los dos).
 //   formas: [{ forma: 'CHEQUE'|'EFECTIVO'|'TRANSFERENCIA'|'DEPOSITO', monto, numeroCheque?, cuenta?,
-//              banco?, fecha?, transaccion? }] (solo las que tienen monto; en cheques cuenta y banco
-//              son los del cliente; en transferencia/depósito, transaccion es el número o la boleta).
+//              banco?, fecha?, transaccion?, cuentaDeposito? }] (solo las que tienen monto; en cheques
+//              cuenta y banco son los del cliente; en transferencia/depósito, transaccion es el número
+//              o la boleta y cuentaDeposito la cuenta de la empresa a la que entró).
 //   saldoServidor: saldo del documento en el servidor (sin abonos del equipo), moneda del cobro.
 // Devuelve { id, recibo }.
 export async function registrarPago({
@@ -129,15 +169,30 @@ export async function registrarPago({
   documento,
   compania,
   moneda,
-  cuenta,
+  cuentaPrincipal,
   saldoAnterior,
   saldoServidor,
   formas,
   notas,
 }) {
-  if (!cuenta) throw new Error('Selecciona la cuenta de banco del recibo.');
+  // Cuenta de cada forma y partes del recibo (una por cuenta, en el orden en que aparecen).
+  const conCuenta = formas.map((f) => ({ ...f, cuentaRecibo: cuentaDeForma(f, cuentaPrincipal) }));
+  const sinCuenta = conCuenta.find((f) => !f.cuentaRecibo?.cuenta || !f.cuentaRecibo?.banco);
+  if (sinCuenta) {
+    throw new Error(
+      usaCuentaPrincipal(sinCuenta.forma)
+        ? 'Selecciona la cuenta principal del recibo (donde se depositarán el efectivo y los cheques).'
+        : `Selecciona la cuenta de banco de cada ${FORMAS_PAGO[sinCuenta.forma]?.toLowerCase() ?? 'forma de pago'}.`
+    );
+  }
+  const partes = new Map();
+  for (const f of conCuenta) {
+    if (!partes.has(claveCuenta(f.cuentaRecibo))) partes.set(claveCuenta(f.cuentaRecibo), f.cuentaRecibo);
+  }
+
   const monto = formas.reduce((s, f) => s + f.monto, 0);
   const mon = codigoMoneda(moneda);
+  const notasRecibo = String(notas ?? '').trim().slice(0, MAX_NOTAS_RECIBO) || null;
   const db = await getDatabase();
   let id = null;
   let recibo = null;
@@ -153,18 +208,22 @@ export async function registrarPago({
         `El consecutivo de recibo de la ruta ${ruta} ("${recibo}") no es válido: debe ser como RERT_01_00001.`
       );
     }
-    const repetido = await db.getFirstAsync('SELECT 1 AS x FROM alCXC_ENC_DEP WHERE CTA_BCO = ? AND NUM_DEP = ?', [
-      cuenta.cuenta,
-      recibo,
-    ]);
-    if (repetido) throw new Error(`Ya existe el recibo ${recibo} en la cuenta ${cuenta.cuenta}.`);
-
-    await db.runAsync(
-      // DOC_PRO 'N': pendiente hasta que control lo aplique (lo confirma GET /fr/sync/recibosPendientes).
-      `INSERT INTO alCXC_ENC_DEP (COD_CIA, COD_BCO, CTA_BCO, NUM_DEP, FEC_DEP, IND_MON, NOTAS, ORIGEN, DOC_PRO)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'RECIBO', 'N')`,
-      [cuenta.compania ?? '', cuenta.banco, cuenta.cuenta, recibo, ahora, mon, String(notas ?? '').trim().slice(0, MAX_NOTAS_RECIBO) || null]
+    // El número es del recibo completo (todas sus cuentas): no puede existir en ninguna cuenta.
+    const repetido = await db.getFirstAsync(
+      "SELECT CTA_BCO FROM alCXC_ENC_DEP WHERE NUM_DEP = ? AND ORIGEN = 'RECIBO' LIMIT 1",
+      [recibo]
     );
+    if (repetido) throw new Error(`Ya existe el recibo ${recibo} (cuenta ${repetido.CTA_BCO}).`);
+
+    // Una parte por cuenta, con la misma fecha, moneda y notas. DOC_PRO 'N': pendiente hasta que
+    // control la aplique (lo confirma GET /fr/sync/recibosPendientes, por parte).
+    for (const c of partes.values()) {
+      await db.runAsync(
+        `INSERT INTO alCXC_ENC_DEP (COD_CIA, COD_BCO, CTA_BCO, NUM_DEP, FEC_DEP, IND_MON, NOTAS, ORIGEN, DOC_PRO)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'RECIBO', 'N')`,
+        [c.compania ?? '', c.banco, c.cuenta, recibo, ahora, mon, notasRecibo]
+      );
+    }
 
     const res = await db.runAsync(
       `INSERT INTO COBRO_PAGO
@@ -188,7 +247,8 @@ export async function registrarPago({
     );
     id = res.lastInsertRowId;
     let linea = 1;
-    for (const f of formas) {
+    for (const f of conCuenta) {
+      const c = f.cuentaRecibo;
       await db.runAsync(
         `INSERT INTO COBRO_PAGO_DET
            (ID_PAGO, LINEA, FORMA, MONTO, NUM_CHEQUE, NUM_CUENTA, BANCO_CHEQUE, FECHA_CHEQUE, NUM_TRANSACCION,
@@ -200,15 +260,15 @@ export async function registrarPago({
           f.forma,
           f.monto,
           f.numeroCheque ?? null,
-          f.forma === 'CHEQUE' ? f.cuenta ?? null : cuenta.cuenta,
+          f.forma === 'CHEQUE' ? f.cuenta ?? null : c.cuenta,
           f.forma === 'CHEQUE' ? f.banco ?? null : null,
           f.fecha ?? null,
           f.transaccion ?? null,
-          cuenta.compania ?? null,
-          cuenta.banco,
-          cuenta.compania ?? '',
-          cuenta.banco,
-          cuenta.cuenta,
+          c.compania ?? null,
+          c.banco,
+          c.compania ?? '',
+          c.banco,
+          c.cuenta,
           recibo,
         ]
       );
@@ -294,7 +354,69 @@ export async function eliminarPagoSinRecibo(idPago) {
   });
 }
 
-// Datos para mostrar / imprimir el recibo de un pago.
+// Formas de pago (COBRO_PAGO_DET) de varios pagos con la cuenta de la empresa a la que entró cada
+// una (DEP_BCO + DEP_CTA) y el nombre de esa cuenta. Map ID_PAGO -> filas, en orden de LINEA.
+async function leerFormasConCuenta(db, ids) {
+  if (!ids.length) return new Map();
+  const filas = await db.getAllAsync(
+    `SELECT d.ID_PAGO, d.FORMA, d.MONTO, d.NUM_CHEQUE, d.NUM_CUENTA, d.BANCO_CHEQUE, d.FECHA_CHEQUE,
+            d.NUM_TRANSACCION, d.DEP_BCO, d.DEP_CTA, b.NOM_CTA
+       FROM COBRO_PAGO_DET d
+       -- Nombre de la cuenta (no depende de la compañía: el número de cuenta + banco basta).
+       LEFT JOIN (SELECT COD_BCO, CTA_BCO, MIN(NOM_CTA) AS NOM_CTA FROM alCXC_CTA_BCO GROUP BY COD_BCO, CTA_BCO) b
+              ON b.COD_BCO = d.DEP_BCO AND b.CTA_BCO = d.DEP_CTA
+      WHERE d.ID_PAGO IN (${ids.map(() => '?').join(',')})
+      ORDER BY d.ID_PAGO, d.LINEA`,
+    ids
+  );
+  const porPago = new Map();
+  for (const f of filas) {
+    if (!porPago.has(f.ID_PAGO)) porPago.set(f.ID_PAGO, []);
+    porPago.get(f.ID_PAGO).push(f);
+  }
+  return porPago;
+}
+
+// Cuentas y formas de pago de un recibo a partir de sus filas (leerFormasConCuenta). Mismo formato
+// que arma el backend para el PDF (controllers/fr/reciboPdf.js):
+//   cuentas: [{ banco, cuenta, nombreCuenta, monto }], una por cuenta, en el orden en que aparecen.
+//   formas: [{ forma, monto, numeroCheque, cuenta, banco, fecha, transaccion, cuentaDeposito? }];
+//           con VARIAS cuentas, transferencias y depósitos llevan cuentaDeposito (nombre de su cuenta).
+//   banco / cuenta / nombreCuenta: los de la primera cuenta (un recibo de una cuenta queda como antes).
+function cuentasDelRecibo(filas) {
+  const cuentas = new Map();
+  for (const f of filas ?? []) {
+    if (!f.DEP_CTA) continue;
+    const clave = `${f.DEP_BCO}|${f.DEP_CTA}`;
+    const c = cuentas.get(clave) ?? { banco: f.DEP_BCO ?? '', cuenta: f.DEP_CTA, nombreCuenta: f.NOM_CTA ?? '', monto: 0 };
+    c.monto = Math.round((c.monto + Number(f.MONTO ?? 0)) * 100) / 100;
+    cuentas.set(clave, c);
+  }
+  const lista = [...cuentas.values()];
+  const varias = lista.length > 1;
+  const primera = lista[0];
+  return {
+    banco: primera?.banco ?? '',
+    cuenta: primera?.cuenta ?? '',
+    nombreCuenta: primera?.nombreCuenta ?? '',
+    cuentas: lista,
+    formas: (filas ?? []).map((f) => ({
+      forma: f.FORMA,
+      monto: Number(f.MONTO ?? 0),
+      numeroCheque: f.NUM_CHEQUE,
+      cuenta: f.NUM_CUENTA,
+      banco: f.BANCO_CHEQUE,
+      fecha: f.FECHA_CHEQUE,
+      transaccion: f.NUM_TRANSACCION,
+      ...(varias && (f.FORMA === 'TRANSFERENCIA' || f.FORMA === 'DEPOSITO') && f.DEP_CTA
+        ? { cuentaDeposito: f.NOM_CTA || f.DEP_CTA }
+        : {}),
+    })),
+  };
+}
+
+// Datos para mostrar / imprimir el recibo de un pago. Un recibo repartido en varias cuentas trae
+// todas en `cuentas` (ver cuentasDelRecibo); monto = total de todas.
 export async function getRecibo(idPago) {
   const db = await getDatabase();
   const p = await db.getFirstAsync(
@@ -303,29 +425,17 @@ export async function getRecibo(idPago) {
                JOIN alCXC_ENC_DEP e
                  ON e.COD_CIA = d.DEP_CIA AND e.COD_BCO = d.DEP_BCO AND e.CTA_BCO = d.DEP_CTA AND e.NUM_DEP = d.DEP_NUM
               WHERE d.ID_PAGO = p.ID LIMIT 1) AS NOTAS_RECIBO,
-            c.NOM_CLT, d1.DEP_BCO, d1.DEP_CTA, b.NOM_CTA,
-            pc.AGENTE, pc.NOMBRE_AGENTE
+            c.NOM_CLT, pc.AGENTE, pc.NOMBRE_AGENTE
        FROM COBRO_PAGO p
        LEFT JOIN (SELECT TRIM(COD_CLT) AS COD_CLT, MIN(NOM_CLT) AS NOM_CLT FROM CLIENTE GROUP BY TRIM(COD_CLT)) c
               ON c.COD_CLT = TRIM(p.COD_CLT)
-       -- Cuenta del recibo: la guarda cada forma de pago (DEP_BCO + DEP_CTA); se toma la primera que la tenga.
-       LEFT JOIN (SELECT ID_PAGO, DEP_BCO, DEP_CTA FROM COBRO_PAGO_DET
-                   WHERE DEP_CTA IS NOT NULL AND ID_PAGO = ? ORDER BY LINEA LIMIT 1) d1
-              ON d1.ID_PAGO = p.ID
-       -- Nombre de la cuenta (no depende de la compañía: el número de cuenta + banco basta).
-       LEFT JOIN (SELECT COD_BCO, CTA_BCO, MIN(NOM_CTA) AS NOM_CTA FROM alCXC_CTA_BCO GROUP BY COD_BCO, CTA_BCO) b
-              ON b.COD_BCO = d1.DEP_BCO AND b.CTA_BCO = d1.DEP_CTA
        LEFT JOIN alCXC_PEN_COB pc
               ON pc.COD_TIP_DC = p.COD_TIP_DC AND pc.NUM_DOC = p.NUM_DOC AND pc.COD_CLT = p.COD_CLT AND pc.COD_ZON = p.COD_ZON
       WHERE p.ID = ?`,
-    [idPago, idPago]
-  );
-  if (!p) return null;
-  const formas = await db.getAllAsync(
-    `SELECT FORMA, MONTO, NUM_CHEQUE, NUM_CUENTA, BANCO_CHEQUE, FECHA_CHEQUE, NUM_TRANSACCION
-       FROM COBRO_PAGO_DET WHERE ID_PAGO = ? ORDER BY LINEA`,
     [idPago]
   );
+  if (!p) return null;
+  const formas = await leerFormasConCuenta(db, [p.ID]);
   return {
     id: p.ID,
     recibo: p.NUM_REC_RECIBO,
@@ -342,55 +452,33 @@ export async function getRecibo(idPago) {
     saldoAnterior: p.SALDO_ANTERIOR,
     saldoNuevo: p.SALDO_NUEVO,
     cancelado: p.SALDO_NUEVO != null && p.SALDO_NUEVO <= 0.005,
-    banco: p.DEP_BCO ?? '',
-    cuenta: p.DEP_CTA ?? '',
-    nombreCuenta: p.NOM_CTA ?? '',
     enviado: p.ENVIADO === 1,
-    // Control ya lo aplicó en el ERP (DOC_PRO 'S'): el servidor ya no puede reconstruir sus saldos.
+    // Control ya aplicó todas sus partes en el ERP (DOC_PRO 'S'): el servidor ya no puede
+    // reconstruir sus saldos.
     aplicado: p.DOC_PRO_RECIBO === 'S',
-    formas: formas.map((f) => ({
-      forma: f.FORMA,
-      monto: Number(f.MONTO ?? 0),
-      numeroCheque: f.NUM_CHEQUE,
-      cuenta: f.NUM_CUENTA,
-      banco: f.BANCO_CHEQUE,
-      fecha: f.FECHA_CHEQUE,
-      transaccion: f.NUM_TRANSACCION,
-    })),
+    ...cuentasDelRecibo(formas.get(p.ID)),
   };
 }
 
 // Cierre de cobro del día (Reportes > Cierre de Cobro): recibos registrados hoy en el equipo con sus
-// formas de pago (detalle de cheques y transferencias / depósitos) y la cuenta de banco del recibo.
-// Más reciente primero.
+// formas de pago (detalle de cheques y transferencias / depósitos) y sus cuentas de banco (un recibo
+// puede repartirse en varias: `cuentas`, cada una con lo que entró en ella). Más reciente primero.
 // [{ id, recibo, fecha, cliente, nombreCliente, ruta, documento, monto, cancelado, enviado, aplicado,
-//    banco, cuenta, nombreCuenta, formas: [{ forma, monto, numeroCheque, cuenta, banco, fecha, transaccion }] }]
+//    banco, cuenta, nombreCuenta, cuentas: [{ banco, cuenta, nombreCuenta, monto }],
+//    formas: [{ forma, monto, numeroCheque, cuenta, banco, fecha, transaccion, cuentaDeposito? }] }]
 export async function getCierreCobroDia() {
   const db = await getDatabase();
   const pagos = await db.getAllAsync(
     `SELECT p.ID, ${SQL_NUM_REC} AS NUM_REC, ${SQL_DOC_PRO} AS DOC_PRO, p.FECHA, p.COD_CLT, p.COD_ZON, p.NUM_DOC,
-            p.MONTO, p.SALDO_NUEVO, p.ENVIADO, c.NOM_CLT, d1.DEP_BCO, d1.DEP_CTA, b.NOM_CTA
+            p.MONTO, p.SALDO_NUEVO, p.ENVIADO, c.NOM_CLT
        FROM COBRO_PAGO p
        LEFT JOIN (SELECT TRIM(COD_CLT) AS COD_CLT, MIN(NOM_CLT) AS NOM_CLT FROM CLIENTE GROUP BY TRIM(COD_CLT)) c
               ON c.COD_CLT = TRIM(p.COD_CLT)
-       -- Cuenta del recibo: la guarda cada forma de pago (DEP_BCO + DEP_CTA); se toma la primera que la tenga.
-       LEFT JOIN (SELECT ID_PAGO, MIN(LINEA) AS LINEA FROM COBRO_PAGO_DET WHERE DEP_CTA IS NOT NULL GROUP BY ID_PAGO) l
-              ON l.ID_PAGO = p.ID
-       LEFT JOIN COBRO_PAGO_DET d1 ON d1.ID_PAGO = l.ID_PAGO AND d1.LINEA = l.LINEA
-       LEFT JOIN (SELECT COD_BCO, CTA_BCO, MIN(NOM_CTA) AS NOM_CTA FROM alCXC_CTA_BCO GROUP BY COD_BCO, CTA_BCO) b
-              ON b.COD_BCO = d1.DEP_BCO AND b.CTA_BCO = d1.DEP_CTA
       WHERE date(p.FECHA) = date('now', 'localtime')
       ORDER BY p.FECHA DESC, p.ID DESC`
   );
   if (!pagos.length) return [];
-
-  const detalle = await db.getAllAsync(
-    `SELECT ID_PAGO, FORMA, MONTO, NUM_CHEQUE, NUM_CUENTA, BANCO_CHEQUE, FECHA_CHEQUE, NUM_TRANSACCION
-       FROM COBRO_PAGO_DET
-      WHERE ID_PAGO IN (${pagos.map(() => '?').join(',')})
-      ORDER BY ID_PAGO, LINEA`,
-    pagos.map((p) => p.ID)
-  );
+  const formas = await leerFormasConCuenta(db, pagos.map((p) => p.ID));
 
   return pagos.map((p) => ({
     id: p.ID,
@@ -404,20 +492,7 @@ export async function getCierreCobroDia() {
     cancelado: p.SALDO_NUEVO != null && p.SALDO_NUEVO <= 0.005,
     enviado: p.ENVIADO === 1,
     aplicado: p.DOC_PRO === 'S',
-    banco: p.DEP_BCO ?? '',
-    cuenta: p.DEP_CTA ?? '',
-    nombreCuenta: p.NOM_CTA ?? '',
-    formas: detalle
-      .filter((d) => d.ID_PAGO === p.ID)
-      .map((d) => ({
-        forma: d.FORMA,
-        monto: Number(d.MONTO ?? 0),
-        numeroCheque: d.NUM_CHEQUE,
-        cuenta: d.NUM_CUENTA,
-        banco: d.BANCO_CHEQUE,
-        fecha: d.FECHA_CHEQUE,
-        transaccion: d.NUM_TRANSACCION,
-      })),
+    ...cuentasDelRecibo(formas.get(p.ID)),
   }));
 }
 
@@ -427,7 +502,7 @@ export async function getCierreCobroDia() {
 export async function getAbonosEquipo() {
   const db = await getDatabase();
   const rows = await db.getAllAsync(
-    `SELECT p.COD_ZON, p.COD_CLT, p.COD_TIP_DC, p.NUM_DOC, p.MONEDA, p.MONTO, ${SQL_DOC_PRO} AS DOC_PRO,
+    `SELECT p.COD_ZON, p.COD_CLT, p.COD_TIP_DC, p.NUM_DOC, p.MONEDA, ${SQL_MONTO_PENDIENTE} AS PENDIENTE,
             date(p.FECHA) = date('now', 'localtime') AS HOY
        FROM COBRO_PAGO p
       ORDER BY p.ID`
@@ -436,7 +511,7 @@ export async function getAbonosEquipo() {
   for (const r of rows) {
     const clave = `${r.COD_ZON}|${r.COD_CLT}|${r.COD_TIP_DC}|${r.NUM_DOC}`;
     const lista = abonos.get(clave) ?? [];
-    lista.push({ moneda: r.MONEDA, monto: Number(r.MONTO ?? 0), aplicado: r.DOC_PRO === 'S', hoy: r.HOY === 1 });
+    lista.push({ ...abonoSaldo(r), hoy: r.HOY === 1 });
     abonos.set(clave, lista);
   }
   return abonos;

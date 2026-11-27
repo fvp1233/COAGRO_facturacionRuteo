@@ -68,7 +68,7 @@ export default function AprobarCotizacionModal({ visible, cliente, cotizacion, o
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <CenteredHeader title={`Cotización ${cotizacion.numero}`} onBack={onClose} />
+        <CenteredHeader info={'Elige la fecha de entrega para aprobar la cotización. Al aprobarla pasa a ser un pedido con fecha de hoy y la visita del cliente queda como efectiva.'} title={`Cotización ${cotizacion.numero}`} onBack={onClose} />
 
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.info} numberOfLines={1}>

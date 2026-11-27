@@ -149,8 +149,12 @@ export function htmlRecibo(r, { logo = '' } = {}) {
   const estado = r.cancelado ? 'CANCELADO' : 'ABONO';
   const referencias = r.formas
     .filter((x) => (x.forma === 'TRANSFERENCIA' || x.forma === 'DEPOSITO') && x.transaccion)
-    .map((x) => `${x.forma === 'DEPOSITO' ? 'Depósito, boleta' : 'Transferencia'} No. ${x.transaccion} — ${formatMonto(x.monto)}`);
-  const cuenta = r.cuenta ? [r.nombreCuenta, `Cta. ${r.cuenta}`].filter(Boolean).join(' · ') : 'Sin cuenta registrada';
+    .map((x) => `${x.forma === 'DEPOSITO' ? 'Depósito, boleta' : 'Transferencia'} No. ${x.transaccion} — ${formatMonto(x.monto)}${x.cuentaDeposito ? ` (${x.cuentaDeposito})` : ''}`);
+  const textoCuenta = (c) => [c.nombreCuenta, `Cta. ${c.cuenta}`].filter(Boolean).join(' · ');
+  // r.cuentas (opcional): recibo abonado a varias cuentas, [{ cuenta, nombreCuenta, monto }].
+  const cuenta = r.cuentas?.length > 1
+    ? r.cuentas.map((c) => esc(`${textoCuenta(c)}: ${formatMonto(c.monto)}`)).join('<br />')
+    : esc(r.cuenta ? textoCuenta(r) : 'Sin cuenta registrada');
   const saldoDespues = r.saldoNuevo != null ? Math.max(0, Number(r.saldoNuevo)) : null;
 
   const fila = (x, i) => `
@@ -286,7 +290,7 @@ export function htmlRecibo(r, { logo = '' } = {}) {
       <table>
         <tr><td class="etq">Técnico / ruta</td><td>${esc([r.tecnico, r.nombreTecnico].filter(Boolean).join(' - '))}</td></tr>
         <tr><td class="etq">Moneda</td><td>${esc(MONEDAS[r.moneda] ?? r.moneda ?? '')}</td></tr>
-        <tr><td class="etq">Cuenta</td><td>${esc(cuenta)}</td></tr>
+        <tr><td class="etq">Cuenta</td><td>${cuenta}</td></tr>
       </table>
     </div>
   </div>

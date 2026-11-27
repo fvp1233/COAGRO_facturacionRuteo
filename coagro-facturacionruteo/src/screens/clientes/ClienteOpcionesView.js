@@ -18,6 +18,7 @@ export default function ClienteOpcionesView({
   onBack,
   onOpcion,
   title = 'Validar cliente',
+  info = 'Operaciones disponibles para el cliente: pedidos, cotizaciones, cobros, notas de crédito y más. Al salir, la app te pregunta si registras la visita.',
   opciones = OPCIONES_CLIENTE,
   columns = 2,
 }) {
@@ -37,7 +38,7 @@ export default function ClienteOpcionesView({
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title={title} onBack={onBack} />
+      <CenteredHeader title={title} info={info} onBack={onBack} />
 
       <View style={styles.content}>
         <View style={styles.clientCard}>

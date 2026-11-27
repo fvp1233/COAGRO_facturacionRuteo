@@ -205,7 +205,7 @@ export default function AnularDocumentoView({ cliente, ruta, onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Menú Anular" onBack={onBack} />
+      <CenteredHeader info={'Pedidos y cotizaciones de hoy en la ruta. Solo se puede anular el último de cada tipo que todavía no se envió; su número se reutiliza en el siguiente documento.'} title="Menú Anular" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <TabsHistorial tab={tipoDoc} onChange={cambiarTab} tabs={TABS} />

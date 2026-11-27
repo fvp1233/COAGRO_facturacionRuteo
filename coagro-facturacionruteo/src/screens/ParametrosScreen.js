@@ -8,6 +8,8 @@ import CenteredHeader from '../components/ui/CenteredHeader';
 import OptionTile from '../components/consulta/OptionTile';
 import ParametrosSistemaView from './parametros/ParametrosSistemaView';
 import ParametrosDispositivoView from './parametros/ParametrosDispositivoView';
+import ParametrosManualView from './parametros/ParametrosManualView';
+import ParametrosConsultasView from './parametros/ParametrosConsultasView';
 import { PARAMETROS } from '../constants/parametros';
 import { colors, radius, spacing } from '../theme';
 
@@ -18,6 +20,8 @@ const ACCENT = colors.primary;
 const VISTAS = {
   sistema: ParametrosSistemaView,
   dispositivo: ParametrosDispositivoView,
+  manual: ParametrosManualView,
+  consultas: ParametrosConsultasView,
 };
 
 // Módulo Parámetros: menú con las opciones de configuración del sistema y del dispositivo.
@@ -44,7 +48,7 @@ export default function ParametrosScreen({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Parámetros" onBack={onBack} />
+      <CenteredHeader info={'Configuración y ayuda: consecutivos de la ruta, datos del dispositivo, manual de usuario y preguntas frecuentes.'} title="Parámetros" onBack={onBack} />
 
       <View style={styles.content}>
         <View style={styles.infoCard}>

@@ -28,8 +28,9 @@ const valorCia = (fila, col) => {
 
 // Catálogos que acompañan a CLIENTE_CIA en el pedido (país, departamentos, municipios, distritos,
 // condición de pago, subtipos de documento y actividad comercial). Si el servidor manda el arreglo
-// (aunque venga vacío) reemplaza la tabla local; si no lo manda (p. ej. divisiones3, que aún no
-// existe), la tabla no se toca. `claves` = campos obligatorios (las filas sin ellos se descartan).
+// (aunque venga vacío) reemplaza la tabla local; si no lo manda, la tabla no se toca. Las divisiones
+// son las nativas de Softland (país 'ESA'): divisiones1 = departamentos, divisiones2 = municipios y
+// divisiones3 = distritos (las mismas listas de GET /fr/sync/municipios). `claves` = campos obligatorios (las filas sin ellos se descartan).
 // No se filtra por compañía: cada catálogo trae la suya (CINCOH, COAGRO...).
 const CATALOGOS = [
   {

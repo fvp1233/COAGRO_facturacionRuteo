@@ -95,7 +95,7 @@ export default function ReciboView({ idPago, onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Recibo" onBack={onBack} />
+      <CenteredHeader info={'Recibo del pago registrado. Puedes compartirlo en PDF para enviarlo o imprimirlo.'} title="Recibo" onBack={onBack} />
 
       {!recibo ? (
         error ? (

@@ -8,13 +8,15 @@ import Checkbox from '../components/ui/Checkbox';
 import LinkText from '../components/ui/LinkText';
 import { checkCredentials } from '../services/localConfig';
 import { setSession } from '../services/session';
+import { borrarSesionRecordada, guardarSesionRecordada } from '../services/sesionRecordada';
 import { initDatabase } from '../db/database';
 import { validateLoginForm } from '../utils/validators';
 import { colors, spacing } from '../theme';
 
 // Valida contra el JSON local (funciona sin internet). Si es correcto, guarda las credenciales
 // en memoria (para renovar el token al sincronizar), crea/abre la base SQLite (aplica el
-// esquema de migrations.js) y deja entrar a la app.
+// esquema de migrations.js) y deja entrar a la app. Con "Mantener sesión iniciada" la sesión se
+// guarda cifrada en el equipo y la próxima vez la app entra sin pedirla (services/sesionRecordada).
 export default function LoginScreen({ onLogin, onDevReset }) {
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
@@ -38,6 +40,13 @@ export default function LoginScreen({ onLogin, onDevReset }) {
       }
       setSession({ email: usuario, password });
       await initDatabase();
+      // Si no se puede guardar la sesión, igual se entra (solo se pedirá de nuevo la próxima vez).
+      try {
+        if (recordar) await guardarSesionRecordada({ email: usuario, password });
+        else await borrarSesionRecordada();
+      } catch {
+        // almacén seguro no disponible
+      }
       onLogin?.(config);
     } catch {
       setFormError('No se pudo preparar la base de datos local. Intenta de nuevo.');
@@ -85,7 +94,7 @@ export default function LoginScreen({ onLogin, onDevReset }) {
       />
 
       <View style={styles.optionsRow}>
-        <Checkbox label="Recordar usuario" checked={recordar} onChange={setRecordar} />
+        <Checkbox label="Mantener sesión iniciada" checked={recordar} onChange={setRecordar} />
         <LinkText title="¿Olvidaste tu clave?" />
       </View>
 

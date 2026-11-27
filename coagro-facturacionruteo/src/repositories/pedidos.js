@@ -23,8 +23,8 @@ export const TIPOS_PEDIDO = {
 // Datos para abrir un pedido: valores del cliente (CLIENTE_CIA, se descargan en Datos > Cargar
 // datos desde /fr/sync/clientes) y los catálogos para elegirlos. Cada opción es
 // { codigo, descripcion }; las divisiones llevan además `pais` (y `division1` municipios y distritos;
-// los distritos también `municipio`). Ver utils/divisiones.
-// cliente.division3 es el municipio de la reforma (opción B) y cliente.division2 el distrito.
+// los distritos también `division2`). Ver utils/divisiones.
+// cliente.division1 = departamento, division2 = municipio y division3 = distrito.
 // `cliente` es null si el cliente no tiene fila en CLIENTE_CIA.
 // Nivel de precio: CLIENTE.NIVEL_PRECIO del cliente en la ruta (llega en /fr/sync/clientes).
 export async function getDatosPedido(codigoCliente, ruta) {
@@ -39,8 +39,7 @@ export async function getDatosPedido(codigoCliente, ruta) {
     [ruta, codigoCliente]
   );
 
-  // Divisiones (opción B, utils/divisiones): departamentos, municipios de la reforma y distritos
-  // (DIVISION_GEOGRAFICA2 del ERP con su municipio según FR_DISTRITO).
+  // Divisiones (catálogos de Softland, utils/divisiones): departamentos, municipios y distritos.
   const [paises, divisiones1, municipios, distritos, condiciones, niveles, subtipos, actividades] = await Promise.all([
     db.getAllAsync(
       `SELECT COD_PAIS AS codigo, NOMBRE AS descripcion, ETIQUETA_DIV_GEO1 AS etiqueta1,
@@ -52,17 +51,13 @@ export async function getDatosPedido(codigoCliente, ruta) {
          FROM DIVISION_GEOGRAFICA1 ORDER BY NOMBRE`
     ),
     db.getAllAsync(
-      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, MUNICIPIO AS codigo, NOMBRE AS descripcion
-         FROM FR_MUNICIPIO ORDER BY NOMBRE`
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS codigo, NOMBRE AS descripcion
+         FROM DIVISION_GEOGRAFICA2 ORDER BY NOMBRE`
     ),
     db.getAllAsync(
-      `SELECT d.PAIS AS pais, d.DIVISION_GEOGRAFICA1 AS division1, d.DIVISION_GEOGRAFICA2 AS codigo,
-              d.NOMBRE AS descripcion, f.MUNICIPIO AS municipio
-         FROM DIVISION_GEOGRAFICA2 d
-         LEFT JOIN FR_DISTRITO f
-                ON f.PAIS = d.PAIS AND f.DIVISION_GEOGRAFICA1 = d.DIVISION_GEOGRAFICA1
-               AND f.DIVISION_GEOGRAFICA2 = d.DIVISION_GEOGRAFICA2
-        ORDER BY d.NOMBRE`
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS division2,
+              DIVISION_GEOGRAFICA3 AS codigo, NOMBRE AS descripcion
+         FROM DIVISION_GEOGRAFICA3 ORDER BY NOMBRE`
     ),
     db.getAllAsync('SELECT COD_CND AS codigo, DES_CND AS descripcion FROM alFAC_CND_PAG ORDER BY DES_CND'),
     // El nivel se identifica por nombre (NIVEL_PRECIO); un nombre con varias monedas sale una vez.
@@ -85,7 +80,6 @@ export async function getDatosPedido(codigoCliente, ruta) {
           pais: cc.COD_PAIS,
           division1: cc.DIVISION_GEOGRAFICA1,
           division2: cc.DIVISION_GEOGRAFICA2,
-          // Municipio de la reforma (opción B); solo sirve para filtrar distritos.
           division3: cc.DIVISION_GEOGRAFICA3,
           condicionPago: cc.COD_CND,
           nivelPrecio: cc.NIVEL_PRECIO,
@@ -125,17 +119,17 @@ export function faltantesEncabezado(valores) {
 }
 
 // Encabezado que recibe PedidoArticulosView. datos = getDatosPedido; valores = lo elegido en
-// PedidoView (pais, division1, municipio, division2, condicionPago, nivelPrecio, subtipo, actividadComercial,
+// PedidoView (pais, division1, division2, division3, condicionPago, nivelPrecio, subtipo, actividadComercial,
 // creditoFiscal, sugeridoVenta, inicio).
 export function armarEncabezado(datos, valores) {
   const c = datos.cliente;
   return {
     pais: valores.pais,
     division1: valores.division1,
-    // Distrito (código del ERP) -> COD_GEO2. El municipio de la reforma solo sirve en la pantalla
-    // para filtrar distritos: alFAC_ENC_PED no tiene columna para guardarlo.
+    // Municipio -> COD_GEO2 (como DIVISION_GEOGRAFICA2 del cliente). El distrito se elige en la
+    // pantalla pero alFAC_ENC_PED no tiene columna para guardarlo.
     division2: valores.division2,
-    municipio: valores.municipio ?? null,
+    division3: valores.division3 ?? null,
     condicionPago: valores.condicionPago,
     nivelPrecio: valores.nivelPrecio,
     subtipo: valores.subtipo,
@@ -170,6 +164,7 @@ export async function encabezadoPorDefecto(codigoCliente, ruta) {
     pais: c.pais,
     division1: c.division1,
     division2: c.division2,
+    division3: c.division3,
     condicionPago: c.condicionPago,
     nivelPrecio: c.nivelPrecio,
     subtipo: c.subtipo,
@@ -308,7 +303,8 @@ export async function guardarPedido({ ruta, cliente, bodega, encabezado, lineas,
         MON_PRC_MX: r6(l.precio),
         MON_PRC_MN: r6(l.precio / (l.factorVenta || 1)),
         POR_DSC_AP: r6(l.porcDescuento),
-        ART_BON: '0',
+        // '1' = artículo regalado por una promoción tipo 'B' (va a precio 0); '0' = comprado.
+        ART_BON: l.bonificado ? '1' : '0',
         PORC_IMPUESTO1: String(l.impuesto1 ?? 0),
         PORC_IMPUESTO2: String(l.impuesto2 ?? 0),
         PORCENTAJE_IMP1: l.impuesto1 ?? 0,

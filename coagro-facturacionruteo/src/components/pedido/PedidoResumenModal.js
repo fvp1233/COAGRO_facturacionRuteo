@@ -98,7 +98,7 @@ export default function PedidoResumenModal({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <CenteredHeader title={`Resumen ${tipo.del}`} onBack={onClose} />
+        <CenteredHeader info={`Revisa los totales ${tipo.del}, elige la fecha de entrega y escribe observaciones si hace falta. Al guardar queda en el equipo y se envía con Datos > Enviar datos.`} title={`Resumen ${tipo.del}`} onBack={onClose} />
 
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.info} numberOfLines={1}>

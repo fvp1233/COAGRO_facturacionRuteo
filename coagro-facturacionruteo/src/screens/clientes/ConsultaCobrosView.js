@@ -229,7 +229,7 @@ export default function ConsultaCobrosView({ cliente, ruta, onBack, soloVencidos
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title={soloVencidos ? 'Documentos vencidos' : 'Cobros'} onBack={onBack} />
+      <CenteredHeader info={soloVencidos ? 'Documentos vencidos del cliente, del más atrasado al más reciente, con su saldo. Toca uno para ver el detalle o imprimirlo.' : 'Documentos pendientes de cobro del cliente con su vencimiento y saldo. Toca uno para ver el detalle o imprimir su PDF (necesita internet).'} title={soloVencidos ? 'Documentos vencidos' : 'Cobros'} onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.resumen}>

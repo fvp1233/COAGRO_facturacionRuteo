@@ -760,4 +760,218 @@ export const migrations = [
       ALTER TABLE RUTA_CONSECUT_RT ADD COLUMN ARTICULO_FLETE TEXT;
     `);
   },
+
+  // v36: fichas técnicas de artículos (PDF subido en la web). Llega la lista liviana en
+  // GET /fr/mobile/fichaArticulo (ARTICULO + FECHA de la ficha); el PDF se baja solo al abrirlo.
+  // FECHA_LOCAL = FECHA de la copia guardada en el equipo (null = sin copia).
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS FICHA_ARTICULO (
+        "ARTICULO" TEXT PRIMARY KEY NOT NULL,
+        "FECHA" TEXT,
+        "FECHA_LOCAL" TEXT
+      );
+    `);
+  },
+
+  // v37: notas de crédito (DTE 05) sobre un CCF del cliente (Validar > Notas de crédito). Las crea solo
+  // el equipo; se suben en POST /fr/sync/enviar (notasCredito[]) y se descargan con GET
+  // /fr/sync/notasCredito. Las tablas del esquema de Exactus (v2) nunca se usaron y varias columnas no
+  // coincidían con el servidor (POR_DSC_AP2, MON_DSC2): se vuelven a crear con los nombres del servidor
+  // (erpadmin.alFAC_ENC_DEV / alFAC_DET_DEV) y su llave (COD_CIA + COD_ZON + NUM_DEV).
+  // - ENVIADO 0 = solo en el equipo; 1 = en el servidor. DOC_PRO 'N' = pendiente de procesar en oficina.
+  // - NOM_CLT llega del servidor en la descarga. NUM_REF = NUM_FAC del CCF; NCFMODIFICADO = también NUM_FAC (DTE-03-...).
+  // - Líneas: NUM_LN solo es local (orden de captura; no se envía). REF_NUM_LN = NUM_LN de la línea
+  //   del CCF de donde sale (para controlar lo devuelto).
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS alFAC_DET_DEV;
+      DROP TABLE IF EXISTS alFAC_ENC_DEV;
+      CREATE TABLE alFAC_ENC_DEV (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_DEV" TEXT NOT NULL,
+        "COD_CLT" TEXT NOT NULL,
+        "NOM_CLT" TEXT,
+        "HOR_INI" TEXT NOT NULL,
+        "HOR_FIN" TEXT NOT NULL,
+        "FEC_DEV" TEXT NOT NULL,
+        "OBS_DEV" TEXT,
+        "NUM_ITM" INTEGER NOT NULL,
+        "LST_PRE" INTEGER NOT NULL,
+        "EST_DEV" TEXT NOT NULL,
+        "MON_SIV" REAL NOT NULL,
+        "MON_DSC" REAL NOT NULL,
+        "POR_DSC_AP" REAL NOT NULL,
+        "MON_IMP_VT" REAL NOT NULL,
+        "MON_IMP_CS" REAL NOT NULL,
+        "COD_BOD" TEXT NOT NULL DEFAULT 'ND',
+        "IMPRESO" TEXT NOT NULL DEFAULT 'N',
+        "CONSIGNACION" TEXT NOT NULL DEFAULT 'N',
+        "NUM_REF" TEXT,
+        "AUTOMATICA" TEXT,
+        "TIPO" TEXT,
+        "NCF_PREFIJO" TEXT,
+        "NCF" TEXT,
+        "NIVEL_PRECIO" TEXT,
+        "MONEDA" TEXT,
+        "FORMA_PAGO_DEV" TEXT,
+        "COD_PAIS" TEXT,
+        "COD_GEO1" TEXT,
+        "COD_GEO2" TEXT,
+        "SERIE_RESOLUCION" TEXT,
+        "CONSEC_RESOLUCION" INTEGER,
+        "TIPO_ANULACION" TEXT,
+        "POR_DESC_AP2" REAL,
+        "MONT_DESC2" REAL,
+        "CLAVE_DE" TEXT,
+        "JUSTI_DEV_HACIEND" TEXT,
+        "ACTIVIDAD_COMERCIAL" TEXT,
+        "NCFMODIFICADO" TEXT,
+        "INCOTERMS" TEXT,
+        "FORMAS_PAGO" TEXT,
+        "NATURALEZA_OPERACION" TEXT,
+        "CUFE" TEXT,
+        "CODIGOQR" TEXT,
+        "COD_MODIFICACION" TEXT,
+        "RAZON_MODIF" TEXT,
+        "TIPO_INGRESO" TEXT,
+        "TIPO_PAGO" TEXT,
+        "NCF_CONTINGENCIA" TEXT,
+        "NCF_PREFIJO_CONTINGENCIA" TEXT,
+        "MASCARA_DTE" TEXT,
+        "CODIGO_ANULACION" TEXT,
+        "SUBTIPO" INTEGER,
+        "DOC_PRO" TEXT,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        PRIMARY KEY ("COD_CIA", "COD_ZON", "NUM_DEV")
+      );
+      CREATE INDEX IF NOT EXISTS IX_alFAC_ENC_DEV_CLT ON alFAC_ENC_DEV ("COD_CLT", "NUM_REF");
+      CREATE TABLE alFAC_DET_DEV (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_DEV" TEXT NOT NULL,
+        "NUM_LN" INTEGER,
+        "REF_NUM_LN" INTEGER,
+        "COD_ART" TEXT NOT NULL,
+        "IND_DEV" TEXT NOT NULL,
+        "ART_BON" TEXT NOT NULL DEFAULT '0',
+        "LOTE" TEXT NOT NULL DEFAULT '',
+        "LOTE_HIST" TEXT NOT NULL DEFAULT '',
+        "CNT_MAX" REAL NOT NULL,
+        "CNT_MIN" REAL NOT NULL,
+        "MON_TOT" REAL NOT NULL,
+        "MON_PRC_MX" REAL NOT NULL,
+        "MON_PRC_MN" REAL NOT NULL,
+        "MON_DSC" REAL NOT NULL,
+        "POR_DSC_AP" REAL NOT NULL,
+        "LST_PRE" INTEGER NOT NULL,
+        "OBS_DEV" TEXT,
+        "TIPO_IMPUESTO1" TEXT,
+        "TIPO_TARIFA1" TEXT,
+        "TIPO_IMPUESTO2" TEXT,
+        "TIPO_TARIFA2" TEXT,
+        "PORC_EXONERACION" REAL,
+        "MONTO_EXONERACION" REAL,
+        "PORC_IMPUESTO1" REAL,
+        "PORC_IMPUESTO2" REAL,
+        "ES_OTRO_CARGO" TEXT,
+        "ES_CANASTA_BASICA" TEXT,
+        "USA_IMPUESTO2_CANTIDAD" TEXT,
+        "INDICADOR_FACTURACION" TEXT,
+        PRIMARY KEY ("COD_CIA", "COD_ZON", "NUM_DEV", "COD_ART", "IND_DEV", "LOTE_HIST", "LOTE", "ART_BON")
+      );
+    `);
+  },
+
+  // v38: división geográfica con los catálogos NATIVOS de Softland (país 'ESA'); FR_MUNICIPIO y
+  // FR_DISTRITO (opción B, v34) ya no existen para la app. Jerarquía normal:
+  //   DIVISION_GEOGRAFICA1 = departamento -> DIVISION_GEOGRAFICA2 = MUNICIPIO -> DIVISION_GEOGRAFICA3 = DISTRITO.
+  // (Antes DIVISION_GEOGRAFICA2 era el distrito y DIVISION_GEOGRAFICA3 el municipio.) Los catálogos
+  // llegan en GET /fr/sync/municipios y /fr/sync/clientes; se vacían aquí para no mezclar los viejos
+  // con los nuevos: se vuelven a llenar con Datos > Cargar datos (junto con CLIENTE_CIA).
+  // Los cambios de división sin enviar se capturaron con el significado viejo (2 = distrito,
+  // 3 = municipio): se descartan para no mandar un distrito como municipio.
+  async (db) => {
+    await db.execAsync(`
+      DELETE FROM CLIENTE_CAMBIO WHERE ENVIADO = 0 AND CAMPO LIKE 'DIVISION_GEOGRAFICA%';
+      DROP TABLE IF EXISTS FR_DISTRITO;
+      DROP TABLE IF EXISTS FR_MUNICIPIO;
+      DELETE FROM DIVISION_GEOGRAFICA1;
+      DELETE FROM DIVISION_GEOGRAFICA2;
+      DELETE FROM DIVISION_GEOGRAFICA3;
+    `);
+  },
+
+  // v39: la línea base de las notas de crédito por monto (02, 03, 99) cambia de COD_ART '0000' a
+  // '00000' (misma longitud que los demás artículos). Las que aún no se envían pasan al código nuevo.
+  async (db) => {
+    await db.execAsync(`
+      UPDATE alFAC_DET_DEV SET COD_ART = '00000'
+       WHERE COD_ART = '0000'
+         AND EXISTS (SELECT 1 FROM alFAC_ENC_DEV e
+                      WHERE e.COD_CIA = alFAC_DET_DEV.COD_CIA AND e.COD_ZON = alFAC_DET_DEV.COD_ZON
+                        AND e.NUM_DEV = alFAC_DET_DEV.NUM_DEV AND e.ENVIADO = 0);
+    `);
+  },
+
+  // v40: inventario del cliente (Menú Consultar > Inventario): el vendedor cuenta cuánto tiene el cliente de
+  // cada artículo. Se suben en POST /fr/sync/enviar (inventarios[]) y se descargan con GET
+  // /fr/sync/inventarios. NUM_INV = consecutivo INVENTARIO de RUTA_CONSECUT_RT. Las tablas del esquema
+  // de Exactus (v2) nunca se usaron y su llave no era la del servidor: se vuelven a crear con
+  // COD_CIA + COD_ZON + NUM_INV.
+  // - CNT_MAX = cajas (unidad de almacén), CNT_MIN = unidades (detalle); 0 = contado y no tiene.
+  // - ENVIADO 0 = solo en el equipo; 1 = en el servidor. DOC_PRO 'N' = pendiente de procesar en oficina.
+  async (db) => {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS alFAC_DET_INV;
+      DROP TABLE IF EXISTS alFAC_ENC_INV;
+      CREATE TABLE alFAC_ENC_INV (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_INV" TEXT NOT NULL,
+        "COD_CLT" TEXT NOT NULL,
+        "NOM_CLT" TEXT,
+        "HOR_INI" TEXT NOT NULL,
+        "HOR_FIN" TEXT NOT NULL,
+        "FEC_INV" TEXT NOT NULL,
+        "NUM_ITM" INTEGER NOT NULL DEFAULT 0,
+        "DOC_PRO" TEXT,
+        "ENVIADO" INTEGER NOT NULL DEFAULT 0,
+        "FECHA_ENVIO" TEXT,
+        "ERROR_ENVIO" TEXT,
+        PRIMARY KEY ("COD_CIA", "COD_ZON", "NUM_INV")
+      );
+      CREATE INDEX IF NOT EXISTS IX_alFAC_ENC_INV_CLT ON alFAC_ENC_INV ("COD_CLT");
+      CREATE TABLE alFAC_DET_INV (
+        "COD_CIA" TEXT NOT NULL DEFAULT '',
+        "COD_ZON" TEXT NOT NULL,
+        "NUM_INV" TEXT NOT NULL,
+        "NUM_LN" INTEGER,
+        "COD_ART" TEXT NOT NULL,
+        "CNT_MAX" REAL NOT NULL DEFAULT 0,
+        "CNT_MIN" REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY ("COD_CIA", "COD_ZON", "NUM_INV", "COD_ART")
+      );
+    `);
+  },
+
+  // v41: artículos que regala una promoción tipo 'B' (erpadmin.FR_PROMOCION_BONIFICADO, GET
+  // /fr/sync/promocionesBonificados). Una promoción puede regalar VARIOS artículos; se une a
+  // FR_PROMOCION por PROMOCION_ID y se reemplaza completa en cada Cargar datos, como las otras tres.
+  // FR_PROMOCION.ARTICULO_BONIFICADO / CANTIDAD_BONIFICADA quedan siempre en null y ya no se usan.
+  // CANTIDAD = unidades de almacén del artículo regalado por cada vez que se cumple CANTIDAD_MIN.
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS FR_PROMOCION_BONIFICADO (
+        "ID" INTEGER PRIMARY KEY NOT NULL,
+        "PROMOCION_ID" INTEGER NOT NULL,
+        "ARTICULO" TEXT NOT NULL,
+        "CANTIDAD" REAL NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS IX_FR_PROMOCION_BONIFICADO_PROMO ON FR_PROMOCION_BONIFICADO ("PROMOCION_ID");
+    `);
+  },
 ];

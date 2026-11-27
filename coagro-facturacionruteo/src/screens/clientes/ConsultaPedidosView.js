@@ -190,7 +190,7 @@ export default function ConsultaPedidosView({ cliente, ruta, onBack }) {
   return (
     <View style={[historialStyles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Historial de pedidos" onBack={onBack} />
+      <CenteredHeader info={'Historial de pedidos del cliente en el sistema, con sus facturas. Toca uno para ver su detalle y montos.'} title="Historial de pedidos" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={historialStyles.content} keyboardShouldPersistTaps="handled">
         <ClienteHistorialCard

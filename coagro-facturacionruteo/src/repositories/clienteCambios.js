@@ -23,25 +23,23 @@ export const CAMPOS_CLIENTE = {
   telEncargadoPagos: { etiqueta: 'Teléfono encargado de pagos', tabla: 'CLIENTE_CIA', tipo: 'texto', teclado: 'phone-pad' },
   COD_TIP_CL: { etiqueta: 'Tipo cliente', tabla: 'CLIENTE_CIA', tipo: 'opciones', catalogo: 'tiposCliente' },
   NIVEL_PRECIO: { etiqueta: 'Nivel de precio', tabla: 'CLIENTE', tipo: 'opciones', catalogo: 'niveles' },
-  // Divisiones geográficas (opción B, ver migración v34): listas encadenadas, nada de texto libre.
-  //   Departamento (DIVISION_GEOGRAFICA1) -> Municipio de la reforma (DIVISION_GEOGRAFICA3) ->
-  //   Distrito (DIVISION_GEOGRAFICA2, el código del ERP). padre: al cambiarlo se limpia este campo.
-  //   opcional: el municipio puede quedar vacío mientras el servidor no mande los municipios nuevos.
+  // Divisiones geográficas (catálogos de Softland, ver migración v38): listas encadenadas, nada de
+  // texto libre. Departamento (DIVISION_GEOGRAFICA1) -> Municipio (DIVISION_GEOGRAFICA2) ->
+  // Distrito (DIVISION_GEOGRAFICA3). padre: al cambiarlo se limpia este campo.
   DIVISION_GEOGRAFICA1: { etiqueta: 'Departamento', tabla: 'CLIENTE_CIA', tipo: 'opciones', catalogo: 'departamentos' },
-  DIVISION_GEOGRAFICA3: {
+  DIVISION_GEOGRAFICA2: {
     etiqueta: 'Municipio',
     tabla: 'CLIENTE_CIA',
     tipo: 'opciones',
     catalogo: 'municipios',
     padre: 'DIVISION_GEOGRAFICA1',
-    opcional: true,
   },
-  DIVISION_GEOGRAFICA2: {
+  DIVISION_GEOGRAFICA3: {
     etiqueta: 'Distrito',
     tabla: 'CLIENTE_CIA',
     tipo: 'opciones',
     catalogo: 'distritos',
-    padre: 'DIVISION_GEOGRAFICA3',
+    padre: 'DIVISION_GEOGRAFICA2',
   },
   DIA_CRE: { etiqueta: 'Días de crédito', tabla: 'CLIENTE_CIA', tipo: 'entero' },
   LIM_CRE: { etiqueta: 'Límite de crédito', tabla: 'CLIENTE_CIA', tipo: 'numero' },
@@ -53,8 +51,7 @@ export const CAMPOS_CLIENTE = {
 
 // Catálogos para los campos de tipo 'opciones': { tiposCliente, niveles, monedas, departamentos,
 // municipios, distritos }, cada uno [{ codigo, descripcion }]. Las divisiones traen además con qué
-// filtrarlas: departamentos { pais }, municipios { pais, division1 }, distritos { pais, division1,
-// municipio (null si el servidor aún no mandó a qué municipio pertenece) }.
+// filtrarlas: departamentos { pais }, municipios { pais, division1 }, distritos { pais, division1, division2 }.
 export async function getOpcionesEdicion() {
   const db = await getDatabase();
   const [tiposCliente, niveles, departamentos, municipios, distritos] = await Promise.all([
@@ -70,18 +67,13 @@ export async function getOpcionesEdicion() {
          FROM DIVISION_GEOGRAFICA1 ORDER BY NOMBRE`
     ),
     db.getAllAsync(
-      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, MUNICIPIO AS codigo, NOMBRE AS descripcion
-         FROM FR_MUNICIPIO ORDER BY NOMBRE`
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS codigo, NOMBRE AS descripcion
+         FROM DIVISION_GEOGRAFICA2 ORDER BY NOMBRE`
     ),
-    // Distritos = "municipios" del ERP (DIVISION_GEOGRAFICA2) con su municipio de la reforma.
     db.getAllAsync(
-      `SELECT d.PAIS AS pais, d.DIVISION_GEOGRAFICA1 AS division1, d.DIVISION_GEOGRAFICA2 AS codigo,
-              d.NOMBRE AS descripcion, f.MUNICIPIO AS municipio
-         FROM DIVISION_GEOGRAFICA2 d
-         LEFT JOIN FR_DISTRITO f
-                ON f.PAIS = d.PAIS AND f.DIVISION_GEOGRAFICA1 = d.DIVISION_GEOGRAFICA1
-               AND f.DIVISION_GEOGRAFICA2 = d.DIVISION_GEOGRAFICA2
-        ORDER BY d.NOMBRE`
+      `SELECT PAIS AS pais, DIVISION_GEOGRAFICA1 AS division1, DIVISION_GEOGRAFICA2 AS division2,
+              DIVISION_GEOGRAFICA3 AS codigo, NOMBRE AS descripcion
+         FROM DIVISION_GEOGRAFICA3 ORDER BY NOMBRE`
     ),
   ]);
   return {
@@ -110,7 +102,7 @@ export async function getCamposPendientes(cliente) {
 
 // Los tres niveles de la división territorial: si cambia uno, se guardan y envían los tres juntos
 // (con sus valores finales) para que el servidor valide la combinación completa en el mismo envío.
-export const CAMPOS_DIVISION = ['DIVISION_GEOGRAFICA1', 'DIVISION_GEOGRAFICA3', 'DIVISION_GEOGRAFICA2'];
+export const CAMPOS_DIVISION = ['DIVISION_GEOGRAFICA1', 'DIVISION_GEOGRAFICA2', 'DIVISION_GEOGRAFICA3'];
 
 // Valida y normaliza el valor capturado. Devuelve { valor } (texto, número o lista de días) o
 // { error } con el mensaje para el usuario.

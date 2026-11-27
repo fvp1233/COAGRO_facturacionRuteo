@@ -208,7 +208,7 @@ export default function MiDiaReporteView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Mi día" onBack={onBack} />
+      <CenteredHeader info={'Cómo va tu jornada: visitas hechas contra las programadas de hoy, y los pedidos, cotizaciones, cobros y promocionales del día. Toca una tarjeta para filtrar.'} title="Mi día" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.dia}>

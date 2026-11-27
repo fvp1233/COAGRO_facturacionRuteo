@@ -208,7 +208,7 @@ export default function ConsultaFacturasView({ cliente, ruta, facturaInicial = n
   return (
     <View style={[h.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Historial de facturas" onBack={onBack} />
+      <CenteredHeader info={'Facturas del cliente guardadas en el equipo. Toca una para ver su detalle y montos o imprimirla. Las anuladas aparecen marcadas.'} title="Historial de facturas" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={h.content} keyboardShouldPersistTaps="handled">
         <ClienteHistorialCard

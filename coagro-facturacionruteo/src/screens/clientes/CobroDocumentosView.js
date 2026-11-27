@@ -267,7 +267,7 @@ export default function CobroDocumentosView({
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Documentos a cobrar" onBack={onBack} />
+      <CenteredHeader info={'Documentos pendientes del cliente en la moneda elegida. Toca uno para ver su detalle y pagarlo. Con el filtro Abonos anteriores ves los recibos ya registrados.'} title="Documentos a cobrar" onBack={onBack} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.infoCard}>

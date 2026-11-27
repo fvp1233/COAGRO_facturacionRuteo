@@ -52,7 +52,7 @@ export default function ReportesScreen({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Reportes" onBack={onBack} />
+      <CenteredHeader info={'Reportes de la jornada calculados en el equipo, sin necesidad de internet.'} title="Reportes" onBack={onBack} />
 
       <View style={styles.content}>
         <View style={styles.dayCard}>

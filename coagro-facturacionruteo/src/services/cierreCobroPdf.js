@@ -26,9 +26,14 @@ export function resumirCierre(recibos) {
       if (f.forma === 'CHEQUE') cheques.push({ ...f, recibo: r });
       else if (f.forma !== 'EFECTIVO') electronicos.push({ ...f, recibo: r });
     }
-    const clave = `${r.banco}|${r.cuenta}`;
-    const c = cuentas.get(clave) ?? { banco: r.banco, cuenta: r.cuenta, nombre: r.nombreCuenta, monto: 0, recibos: 0 };
-    cuentas.set(clave, { ...c, monto: c.monto + r.monto, recibos: c.recibos + 1 });
+    // Un recibo repartido en varias cuentas suma en cada una lo que entró en ella (y cuenta como recibo
+    // en cada una). Los pagos anteriores a los recibos no tienen cuenta: van en "Sin cuenta".
+    const partes = r.cuentas?.length ? r.cuentas : [{ banco: '', cuenta: '', nombreCuenta: '', monto: r.monto }];
+    for (const x of partes) {
+      const clave = `${x.banco}|${x.cuenta}`;
+      const c = cuentas.get(clave) ?? { banco: x.banco, cuenta: x.cuenta, nombre: x.nombreCuenta, monto: 0, recibos: 0 };
+      cuentas.set(clave, { ...c, monto: c.monto + x.monto, recibos: c.recibos + 1 });
+    }
   }
   const suma = (lista) => lista.reduce((s, x) => s + x.monto, 0);
   return {

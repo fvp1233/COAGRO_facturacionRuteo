@@ -204,7 +204,7 @@ export default function CierreCobroReporteView({ onBack }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Cierre de Cobro" onBack={onBack} />
+      <CenteredHeader info={'Cuadre de lo cobrado hoy: efectivo a entregar, totales por forma de pago y por cuenta, los recibos del día y lo que faltó cobrar. Puedes imprimir el cierre.'} title="Cierre de Cobro" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.dia}>

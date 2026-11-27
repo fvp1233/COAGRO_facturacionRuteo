@@ -68,14 +68,18 @@ function ProductoFila({ producto: p, atenuada, seleccionable = false, selecciona
   );
 }
 
+// Artículos que regala la promoción (FR_PROMOCION_BONIFICADO) por cada vez que se cumple la cantidad
+// mínima de un producto (proporcional: el doble de la mínima regala el doble).
 function Bonificacion({ promo }) {
-  if (!promo.articuloBonificado) return null;
+  if (!promo.bonificados?.length) return null;
+  const regalos = promo.bonificados
+    .map((r) => `${formatCantidad(r.cantidad)} de ${r.descripcion ? `${r.descripcion} (${r.articulo})` : r.articulo}`)
+    .join(', ');
   return (
     <View style={styles.bonificacion}>
       <Feather name="gift" size={14} color={colors.success} />
       <Text style={styles.bonificacionText}>
-        Bonificación: {formatCantidad(promo.cantidadBonificada ?? 0)} de{' '}
-        {promo.bonificadoDescripcion || promo.articuloBonificado}
+        Bonificación por cada cantidad mínima: {regalos}
       </Text>
     </View>
   );

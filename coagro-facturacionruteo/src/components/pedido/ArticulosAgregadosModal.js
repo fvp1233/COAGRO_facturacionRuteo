@@ -29,6 +29,11 @@ function LineaCard({ linea, formatMonto, onEliminar }) {
           </Text>
         </View>
         {linea.esFlete ? <Text style={styles.fleteNota}>Flete: no llega al mínimo de compra</Text> : null}
+        {linea.bonificado ? (
+          <Text style={styles.regaloNota}>
+            Bonificación{linea.promociones?.length ? `: ${linea.promociones.map((t) => `«${t}»`).join(', ')}` : ''}
+          </Text>
+        ) : null}
         {linea.porcDescuento ? (
           <Text style={styles.descuento}>
             Desc. {formatPorcentaje(linea.porcDescuento)} · -{formatMonto(linea.descuento, linea.moneda)}
@@ -36,11 +41,16 @@ function LineaCard({ linea, formatMonto, onEliminar }) {
         ) : null}
       </View>
       {/* Columna derecha solo con el botón de eliminar, centrado. La línea del flete no se borra:
-          la app la quita sola cuando el documento llega al mínimo. */}
+          la app la quita sola cuando el documento llega al mínimo. Tampoco la regalada: sale sola de
+          las líneas compradas. */}
       <View style={styles.cardDerecha}>
         {linea.esFlete ? (
           <View style={[styles.delete, styles.flete]}>
             <Feather name="truck" size={18} color={colors.textMuted} />
+          </View>
+        ) : linea.bonificado ? (
+          <View style={[styles.delete, styles.regalo]}>
+            <Feather name="gift" size={18} color={colors.success} />
           </View>
         ) : (
           <Pressable
@@ -58,7 +68,7 @@ function LineaCard({ linea, formatMonto, onEliminar }) {
 
 // Pantalla con los artículos agregados al pedido (lupa en Artículos del pedido), en cards paginadas.
 // lineas: [{ codigo, descripcion, cantidadTexto (ej. "1 BARRIL + 100 LT"), precio, porcDescuento,
-// descuento, total, moneda, esFlete? }]. formatMonto(n, moneda) da el texto del monto.
+// descuento, total, moneda, esFlete?, bonificado? (regalada, ART_BON '1'), promociones? }]. formatMonto(n, moneda) da el texto del monto.
 // onEliminar(codigo) quita la línea; total = suma de las líneas. tipo: TIPOS_PEDIDO (textos).
 export default function ArticulosAgregadosModal({
   visible,
@@ -91,12 +101,12 @@ export default function ArticulosAgregadosModal({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <CenteredHeader title="Artículos agregados" onBack={onClose} />
+        <CenteredHeader info={'Artículos que llevas agregados, con su cantidad y total. Desde aquí puedes quitar los que ya no van.'} title="Artículos agregados" onBack={onClose} />
         <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content}>
           {lineas.length ? (
             <>
               {pagina.map((l) => (
-                <LineaCard key={l.codigo} linea={l} formatMonto={formatMonto} onEliminar={onEliminar} />
+                <LineaCard key={`${l.codigo}|${l.bonificado ? 'B' : ''}`} linea={l} formatMonto={formatMonto} onEliminar={onEliminar} />
               ))}
               <Pagination
                 page={Math.min(page, totalPages)}
@@ -177,6 +187,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   flete: { backgroundColor: colors.surface },
   fleteNota: { fontSize: 12, color: colors.textMuted },
+  regalo: { backgroundColor: colors.surface },
+  regaloNota: { fontSize: 12, color: colors.success },
   total: { fontSize: 15, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
   empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },

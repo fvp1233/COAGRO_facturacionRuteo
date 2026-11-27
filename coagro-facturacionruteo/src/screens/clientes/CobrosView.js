@@ -22,7 +22,7 @@ export default function CobrosView({ cliente, ruta, onBack, onContinuar }) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
-      <CenteredHeader title="Cobros" onBack={onBack} />
+      <CenteredHeader info={'Elige la moneda en que se cobrará y el tipo de pago, y continúa para ver los documentos pendientes del cliente.'} title="Cobros" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.clientCard}>
