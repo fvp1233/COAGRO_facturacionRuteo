@@ -12,7 +12,7 @@ const ART_BON_NORMAL = ['0', 'N', ''];
 const lista = (valores) => valores.map((v) => `'${v}'`).join(', ');
 
 // Agentes (alias de ruteo) y vendedores del ERP de la última sincronización de metas (app_meta).
-async function leerAgentesSync(db) {
+export async function leerAgentesSync(db) {
   const filas = await db.getAllAsync(
     "SELECT key, value FROM app_meta WHERE key IN ('sync_metas_agentes', 'sync_metas_vendedores')"
   );

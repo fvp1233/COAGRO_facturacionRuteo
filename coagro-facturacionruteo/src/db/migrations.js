@@ -974,4 +974,37 @@ export const migrations = [
       CREATE INDEX IF NOT EXISTS IX_FR_PROMOCION_BONIFICADO_PROMO ON FR_PROMOCION_BONIFICADO ("PROMOCION_ID");
     `);
   },
+
+  // v42: Calendario de cobros por vendedor de la factura.
+  // - VENDEDOR / NOMBRE_VENDEDOR: vendedor del ERP que hizo el documento (documentos_cc.VENDEDOR);
+  //   llegan en /fr/sync/cobros. "Mis documentos" = VENDEDOR del vendedor de la handheld.
+  // - COBRO_OTRO_VENDEDOR: abonos que OTRAS handhelds ya registraron a documentos de las rutas de
+  //   esta y que control aún no aplica en el ERP (GET /fr/sync/cobrosOtros). Se reemplaza completa
+  //   en cada Cargar datos. MONTO en la moneda IND_MON ('L' / 'D').
+  async (db) => {
+    for (const tabla of ['alCXC_PEN_COB', 'alCXC_PEN_COB_AGENTE']) {
+      await db.execAsync(`
+        ALTER TABLE ${tabla} ADD COLUMN VENDEDOR TEXT;
+        ALTER TABLE ${tabla} ADD COLUMN NOMBRE_VENDEDOR TEXT;
+      `);
+    }
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS COBRO_OTRO_VENDEDOR (
+        "COD_CIA" TEXT,
+        "COD_TIP_DC" TEXT NOT NULL,
+        "NUM_DOC" TEXT NOT NULL,
+        "COD_CLT" TEXT NOT NULL,
+        "COD_ZON" TEXT,
+        "CTA_BCO" TEXT NOT NULL,
+        "NUM_DEP" TEXT NOT NULL,
+        "FEC_DEP" TEXT,
+        "IND_MON" TEXT,
+        "MONTO" REAL NOT NULL,
+        "VENDEDOR" TEXT,
+        "NOMBRE_VENDEDOR" TEXT,
+        PRIMARY KEY ("CTA_BCO", "NUM_DEP", "COD_TIP_DC", "NUM_DOC", "COD_CLT")
+      );
+      CREATE INDEX IF NOT EXISTS IX_COBRO_OTRO_VENDEDOR_DOC ON COBRO_OTRO_VENDEDOR ("COD_TIP_DC", "NUM_DOC", "COD_CLT");
+    `);
+  },
 ];

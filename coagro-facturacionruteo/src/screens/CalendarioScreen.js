@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import CenteredHeader from '../components/ui/CenteredHeader';
 import { getVencimientos } from '../repositories/cobros';
+import { getRutaActiva, getRutasHandheld } from '../repositories/rutaActiva';
 import { formatMonto, formatVendedor } from '../utils/formato';
 import { colors, radius, spacing } from '../theme';
 
@@ -13,11 +14,15 @@ const ACCENT = colors.primary;
 const VENCIDO = colors.error;
 const POR_VENCER = colors.warning;
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-// Vistas del calendario: todos los documentos del equipo o solo los del agente (vendedor) del usuario.
+const COBRADO = colors.success;
+// Vistas del calendario: todos los documentos de la ruta elegida (de cualquier vendedor que facture
+// en ella) o solo los facturados por el vendedor de la handheld.
 const VISTAS = [
   { id: 'todos', label: 'Todos los documentos' },
-  { id: 'mios', label: 'Mis documentos vencidos' },
+  { id: 'mios', label: 'Mis documentos' },
 ];
+// Valor del selector de ruta para ver todas las rutas de la handheld juntas.
+const TODAS = '__todas__';
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -48,8 +53,10 @@ function tituloDia(clave) {
 
 // Módulo Calendario: vencimientos de los documentos pendientes de cobro (alCXC_PEN_COB, descargados
 // con Datos > Cargar datos). El mes marca los días con vencimientos (rojo = ya vencido, ámbar = por
-// vencer); al tocar un día se listan sus documentos con el cliente, el número y el saldo.
-// Arriba se elige la vista: todos los documentos o solo los que le toca cobrar al usuario.
+// vencer); al tocar un día se listan sus documentos con el cliente, el número, el vendedor y el saldo.
+// Arriba se elige la ruta (al abrir, la ruta activa; o Todas para verlas juntas, con el resumen de
+// cada ruta) y la vista: todos los documentos de la ruta (para ver si otro vendedor ya le cobró al
+// cliente) o solo los del vendedor de la handheld.
 export default function CalendarioScreen({ onBack }) {
   const insets = useSafeAreaInsets();
   const hoy = hoyClave();
@@ -59,18 +66,22 @@ export default function CalendarioScreen({ onBack }) {
   });
   const [seleccionado, setSeleccionado] = useState(hoy);
   const [vista, setVista] = useState('todos');
-  const [documentos, setDocumentos] = useState([]);
+  const [todos, setTodos] = useState([]);
+  const [rutas, setRutas] = useState([]);
+  const [ruta, setRuta] = useState(TODAS);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelado = false;
-    setCargando(true);
-    setError('');
-    setDocumentos([]);
-    getVencimientos({ soloAgente: vista === 'mios' })
-      .then((lista) => {
-        if (!cancelado) setDocumentos(lista);
+    Promise.all([getVencimientos(), getRutasHandheld()])
+      .then(async ([lista, rutasHandheld]) => {
+        // Al abrir se muestra una sola ruta: la activa, o la primera si aún no se eligió.
+        const activa = rutasHandheld.length ? (await getRutaActiva(rutasHandheld)) ?? rutasHandheld[0] : null;
+        if (cancelado) return;
+        setTodos(lista);
+        setRutas(rutasHandheld);
+        setRuta(activa?.codigo ?? TODAS);
       })
       .catch(() => {
         if (!cancelado) setError('No se pudieron leer los documentos de la base local.');
@@ -81,7 +92,29 @@ export default function CalendarioScreen({ onBack }) {
     return () => {
       cancelado = true;
     };
-  }, [vista]);
+  }, []);
+
+  // Documentos de la vista (todos / míos) en todas las rutas, y de ahí los de la ruta elegida.
+  const deLaVista = useMemo(() => (vista === 'mios' ? todos.filter((d) => d.esMio) : todos), [todos, vista]);
+  const documentos = useMemo(
+    () => (ruta === TODAS ? deLaVista : deLaVista.filter((d) => d.rutas.includes(ruta))),
+    [deLaVista, ruta]
+  );
+  // Vencidos con saldo (los que otro vendedor ya cobró por completo no cuentan) y su total.
+  const resumenDe = (lista) => {
+    const v = lista.filter((d) => d.vence < hoy && !d.cobrado);
+    return { cantidad: v.length, saldo: v.reduce((s, d) => s + Number(d.saldoLocal ?? 0), 0) };
+  };
+  // Con Todas: el resumen de cada ruta. Un documento que está en dos rutas cuenta en las dos (el
+  // total de arriba lo cuenta una sola vez).
+  const resumenRutas = useMemo(
+    () =>
+      ruta === TODAS && rutas.length > 1
+        ? rutas.map((r) => ({ ...r, ...resumenDe(deLaVista.filter((d) => d.rutas.includes(r.codigo))) }))
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deLaVista, ruta, rutas, hoy]
+  );
 
   // Documentos agrupados por fecha de vencimiento.
   const porDia = useMemo(() => {
@@ -95,7 +128,8 @@ export default function CalendarioScreen({ onBack }) {
   const celdas = celdasMes(mes.anio, mes.mes);
   const delDia = porDia[seleccionado] ?? [];
   const totalDia = delDia.reduce((suma, d) => suma + Number(d.saldoLocal ?? 0), 0);
-  const vencidos = documentos.filter((d) => d.vence < hoy);
+  const vencidos = resumenDe(documentos);
+  const cobradosPorOtros = documentos.filter((d) => d.cobrosOtros.length).length;
 
   const moverMes = (delta) => {
     setMes(({ anio, mes: m }) => {
@@ -116,6 +150,25 @@ export default function CalendarioScreen({ onBack }) {
       <CenteredHeader info={'Vencimientos de los documentos por cobrar. Los días en rojo tienen documentos vencidos y los ámbar por vencer; toca un día para ver sus documentos.'} title="Calendario" onBack={onBack} />
 
       <ScrollView contentContainerStyle={styles.content}>
+        {rutas.length > 1 ? (
+          <View style={styles.segment}>
+            {[...rutas.map((r) => ({ id: r.codigo, label: `Ruta ${r.codigo}` })), { id: TODAS, label: 'Todas' }].map((r) => {
+              const activa = r.id === ruta;
+              return (
+                <Pressable
+                  key={r.id}
+                  onPress={() => setRuta(r.id)}
+                  style={[styles.segmentItem, activa && styles.segmentItemActive]}
+                >
+                  <Text style={[styles.segmentText, activa && styles.segmentTextActive]} numberOfLines={1}>
+                    {r.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
         <View style={styles.segment}>
           {VISTAS.map((v) => {
             const activa = v.id === vista;
@@ -139,11 +192,22 @@ export default function CalendarioScreen({ onBack }) {
           </View>
           <View style={styles.summaryTexts}>
             <Text style={styles.summaryTitle}>
-              {vista === 'mios' ? 'Mis documentos por cobrar' : 'Vencimientos de documentos'}
+              {vista === 'mios' ? 'Mis documentos' : 'Todos los documentos'}
+              {ruta === TODAS ? (rutas.length > 1 ? ' · todas las rutas' : '') : ` · ruta ${ruta}`}
             </Text>
             <Text style={styles.summaryMeta} numberOfLines={1}>
-              {vencidos.length} vencidos · {formatMonto(vencidos.reduce((s, d) => s + Number(d.saldoLocal ?? 0), 0))}
+              {vencidos.cantidad} vencidos · {formatMonto(vencidos.saldo)}
             </Text>
+            {resumenRutas.map((r) => (
+              <Text key={r.codigo} style={styles.summaryMeta} numberOfLines={1}>
+                Ruta {r.codigo}: {r.cantidad} vencidos · {formatMonto(r.saldo)}
+              </Text>
+            ))}
+            {cobradosPorOtros ? (
+              <Text style={styles.summaryMeta} numberOfLines={1}>
+                {cobradosPorOtros} con cobro de otro vendedor pendiente de aplicar
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -220,27 +284,57 @@ export default function CalendarioScreen({ onBack }) {
 
         {cargando ? <ActivityIndicator color={ACCENT} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!cargando && !error && vista === 'mios' && todos.length > 0 && !deLaVista.length ? (
+          <Text style={styles.empty}>
+            No hay documentos de tu vendedor. Si esperabas verlos, ve a Datos &gt; Cargar datos.
+          </Text>
+        ) : null}
         {!cargando && !error && !delDia.length ? (
           <Text style={styles.empty}>No hay documentos que venzan este día.</Text>
         ) : null}
 
         {delDia.map((d) => (
           <View key={d.clave} style={styles.item}>
-            <View style={[styles.itemBar, { backgroundColor: d.vence < hoy ? VENCIDO : POR_VENCER }]} />
+            <View
+              style={[styles.itemBar, { backgroundColor: d.cobrado ? COBRADO : d.vence < hoy ? VENCIDO : POR_VENCER }]}
+            />
             <View style={styles.itemTexts}>
               <Text style={styles.itemName} numberOfLines={2}>{d.nombre}</Text>
               <Text style={styles.itemMeta}>
                 {d.tipo ? `${d.tipo} ` : ''}{d.documento}
               </Text>
-              <Text style={styles.itemMeta} numberOfLines={1}>Ruta {d.ruta}</Text>
+              <Text style={styles.itemMeta} numberOfLines={1}>
+                {d.rutas.length > 1 ? 'Rutas' : 'Ruta'} {d.ruta}
+              </Text>
               <View style={styles.itemAgent}>
                 <Feather name="user" size={12} color={colors.textMuted} />
-                <Text style={styles.itemMeta} numberOfLines={1}>
-                  {formatVendedor(d)}
+                <Text style={[styles.itemMeta, d.esMio && styles.itemMio]} numberOfLines={1}>
+                  {formatVendedor(d)}{d.esMio ? ' (tú)' : ''}
                 </Text>
               </View>
+              {d.cobrosOtros.map((a) => (
+                <View key={`${a.recibo}|${a.moneda}`} style={styles.itemAgent}>
+                  <Feather name="check-circle" size={12} color={COBRADO} />
+                  <Text style={styles.itemCobro} numberOfLines={2}>
+                    Cobrado por {a.nombreVendedor || a.vendedor || 'otro vendedor'} · Recibo {a.recibo} · {formatMonto(a.monto)}
+                  </Text>
+                </View>
+              ))}
+              {d.abonadoPorMi ? (
+                <View style={styles.itemAgent}>
+                  <Feather name="check-circle" size={12} color={COBRADO} />
+                  <Text style={styles.itemCobro} numberOfLines={1}>Con abono tuyo pendiente de aplicar</Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.itemAmount}>{formatMonto(d.saldoLocal)}</Text>
+            <View style={styles.itemAmounts}>
+              <Text style={[styles.itemAmount, d.cobrado && { color: COBRADO }]}>
+                {d.cobrado ? 'Cobrado' : formatMonto(d.saldoLocal)}
+              </Text>
+              {Math.abs(Number(d.saldoServidorLocal ?? 0) - Number(d.saldoLocal ?? 0)) > 0.005 ? (
+                <Text style={styles.itemAmountPrev}>de {formatMonto(d.saldoServidorLocal)}</Text>
+              ) : null}
+            </View>
           </View>
         ))}
       </ScrollView>
@@ -381,4 +475,8 @@ const styles = StyleSheet.create({
   itemMeta: { fontSize: 12, color: colors.textMuted },
   itemAgent: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
   itemAmount: { fontSize: 15, fontWeight: '700', color: colors.text },
+  itemAmounts: { alignItems: 'flex-end' },
+  itemAmountPrev: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  itemMio: { color: colors.text, fontWeight: '600' },
+  itemCobro: { fontSize: 12, color: COBRADO, flexShrink: 1 },
 });

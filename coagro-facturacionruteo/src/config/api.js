@@ -7,8 +7,8 @@ export const API_PREFIX = '/api/v1';
 
 // Servidor a usar (protocolo + host + puerto, sin "/api/v1"). Deja activa solo una línea.
 // Con null se usa el servidor guardado en la pantalla de Conexión.
-//export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
-export const BASE_URL = 'http://192.168.58.107:5000';            // Local (IP de esta PC en la red)
+export const BASE_URL = 'http://190.5.130.250:5000';   // En línea (IP pública del servidor)
+//export const BASE_URL = 'http://192.168.58.107:5000';            // Local (IP de esta PC en la red)
 //export const BASE_URL = null;
 //export const BASE_URL = 'http://192.168.1.9:5000';
 
@@ -36,6 +36,8 @@ export const PATHS = {
   syncCobros: '/fr/sync/cobros',
   // Pendientes de cobro solo del agente (vendedor) del token.
   syncCobrosAgente: '/fr/sync/cobrosAgente',
+  // Abonos de OTRAS handhelds a documentos de las rutas de esta, que control aún no aplica (Calendario).
+  syncCobrosOtros: '/fr/sync/cobrosOtros',
   syncConsecutivos: '/fr/sync/consecutivos',
   // Cotizaciones (TIP_DOC 'C') de las rutas de la handheld, para aprobarlas desde la app.
   syncCotizaciones: '/fr/sync/cotizaciones',

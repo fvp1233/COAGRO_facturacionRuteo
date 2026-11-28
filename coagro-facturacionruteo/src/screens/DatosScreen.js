@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { descargarClientes } from '../services/syncClientes';
 import { descargarArticulos } from '../services/syncArticulos';
 import { descargarCobros, descargarCobrosAgente } from '../services/syncCobros';
+import { descargarCobrosOtros, sinCobrosOtros } from '../services/syncCobrosOtros';
 import { descargarConsecutivos } from '../services/syncConsecutivos';
 import { descargarCotizaciones } from '../services/syncCotizaciones';
 import { descargarLotes } from '../services/syncLotes';
@@ -37,7 +38,6 @@ const ACCENT = colors.primary;
 const ACTIONS = [
   { id: 'cargar', title: 'Cargar datos', subtitle: 'Descargar datos desde el servidor', icon: 'download-cloud' },
   { id: 'enviar', title: 'Enviar Datos', subtitle: 'Enviar al servidor lo registrado', icon: 'upload-cloud' },
-  { id: 'archivos', title: 'Actualizar Archivos', subtitle: 'Actualizar catálogos y archivos', icon: 'refresh-cw' },
 ];
 
 function formatFecha(iso) {
@@ -206,6 +206,13 @@ export default function DatosScreen({ module, onBack }) {
           agregarAviso(`No se actualizaron los inventarios de clientes: ${e?.message || 'error del servidor'}`);
           return { guardar: async () => {}, resumen: { inventarios: null, omitidos: 0 } };
         }),
+        // Abonos de otros vendedores (otras handhelds) pendientes de aplicar, para el Calendario. Si el
+        // servidor falla se vacían (no se marca nada como cobrado con datos viejos) y se avisa.
+        cobrosOtros: await descargarCobrosOtros().catch((e) => {
+          if (isAuthError(e) || isNetworkError(e)) throw e;
+          agregarAviso(`No se actualizaron los cobros de otros vendedores: ${e?.message || 'error del servidor'}`);
+          return sinCobrosOtros;
+        }),
         // Va al final: cuadra los recibos del equipo con los pendientes del servidor (DOC_PRO = 'N').
         recibos: await descargarRecibosPendientes(),
       };
@@ -216,7 +223,7 @@ export default function DatosScreen({ module, onBack }) {
       });
       // Fuera de la transacción: borra las copias de fichas que ya no están en la lista.
       await limpiarCopiasFichas().catch(() => {});
-      const { clientes, articulos, lotes, cobros, cobrosAgente, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas, notasCredito, inventarios } =
+      const { clientes, articulos, lotes, cobros, cobrosAgente, cobrosOtros, consecutivos, cotizaciones, historialPedidos, historialFacturas, cuentasBanco, descuentos, promociones, promocionales, recibos, metas, notasCredito, inventarios } =
         Object.fromEntries(
         Object.entries(descargas).map(([k, d]) => [k, d.resumen])
       );
@@ -245,6 +252,7 @@ export default function DatosScreen({ module, onBack }) {
           lotes.omitidos +
           cobros.omitidos +
           cobrosAgente.omitidos +
+          cobrosOtros.omitidos +
           consecutivos.omitidos +
           cotizaciones.omitidos +
           historialPedidos.omitidos +
@@ -272,8 +280,6 @@ export default function DatosScreen({ module, onBack }) {
       cargarDatos();
     } else if (action.id === 'enviar') {
       enviarDatos();
-    } else {
-      Alert.alert(action.title, 'Próximamente.');
     }
   };
 

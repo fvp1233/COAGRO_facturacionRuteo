@@ -14,7 +14,10 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.fvp1233.coagrofacturacionruteo"
+      "package": "com.fvp1233.coagrofacturacionruteo",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -46,6 +49,9 @@
       "eas": {
         "projectId": "a4f69e8b-13ea-43e0-b832-a14ce2edcb0f"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a4f69e8b-13ea-43e0-b832-a14ce2edcb0f"
     }
   }
 }
